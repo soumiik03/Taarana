@@ -1,6 +1,10 @@
 import express from "express";
 import { logger } from "@repo/logger";
 import cors from "cors";
+import { toNodeHandler } from "better-auth/node";
+import { auth } from "./lib/auth";
+
+// add this after app.use(express.json())
 
 import * as trpcExpress from "@trpc/server/adapters/express";
 import { generateOpenApiDocument, createOpenApiExpressMiddleware } from "trpc-to-openapi";
@@ -58,5 +62,7 @@ app.use(
     createContext,
   }),
 );
+
+app.all("/api/auth/*splat", toNodeHandler(auth));
 
 export default app;
