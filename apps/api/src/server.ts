@@ -24,10 +24,14 @@ const openApiDocument = generateOpenApiDocument(serverRouter, {
 if (env.NODE_ENV !== "prod") {
   app.use(
     cors({
-      origin: "*",
+      origin: "http://localhost:3000",
+      credentials: true,
     }),
   );
 }
+
+// Mount Better Auth handler BEFORE body-parsing middleware
+app.all("/api/auth/*splat", toNodeHandler(auth));
 
 app.use(express.json());
 
@@ -62,7 +66,5 @@ app.use(
     createContext,
   }),
 );
-
-app.all("/api/auth/*splat", toNodeHandler(auth));
 
 export default app;

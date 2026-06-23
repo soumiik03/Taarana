@@ -8,7 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const usersTable = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: text("id").primaryKey(),
 
   fullName: varchar("full_name", { length: 80 }).notNull(),
 

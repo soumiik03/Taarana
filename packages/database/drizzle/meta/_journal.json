@@ -15,6 +15,34 @@
       "when": 1782022680159,
       "tag": "0001_exotic_peter_quill",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782219024644,
+      "tag": "0002_smooth_vulcan",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782219149061,
+      "tag": "0003_colorful_human_fly",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782220313315,
+      "tag": "0004_fat_the_executioner",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782220544799,
+      "tag": "0005_account_scope_fields",
+      "breakpoints": true
     }
   ]
 }
