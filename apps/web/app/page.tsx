@@ -1,3 +1,4 @@
+import { authClient } from "~/lib/auth-client";
 import { api } from "~/trpc/server";
 
 export default async function Home() {
