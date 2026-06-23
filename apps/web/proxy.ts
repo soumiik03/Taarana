@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 
 const protectedRoutes = ["/dashboard"];
 const authRoutes = ["/sign-in"];
+const onboardingRoutes = ["/create-workspace"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -17,15 +18,18 @@ export async function proxy(request: NextRequest) {
   const isAuthRoute = authRoutes.some((route) =>
     pathname.startsWith(route)
   );
+  const isOnboardingRoute = onboardingRoutes.some((route) =>
+    pathname.startsWith(route)
+  );
 
- 
+  // Not logged in → redirect to sign-in with callback
   if (isProtectedRoute && !sessionCookie) {
     const signInUrl = new URL("/sign-in", request.url);
     signInUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(signInUrl);
   }
 
-  
+  // Already logged in → don't show sign-in page
   if (isAuthRoute && sessionCookie) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
@@ -34,7 +38,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|public).*)",
-  ],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|public).*)"],
 };
