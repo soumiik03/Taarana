@@ -4,16 +4,19 @@ import Image from "next/image";
 import { useState } from "react";
 import { signIn } from "~/lib/auth-client";
 import { Button } from "~/components/ui/button";
+import { useSearchParams } from "next/navigation";
 
 export function AuthCard() {
   const [isLoading, setIsLoading] = useState(false);
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
 
   const handleGitHubSignIn = async () => {
     setIsLoading(true);
     try {
       await signIn.social({
         provider: "github",
-        callbackURL: "/dashboard",
+        callbackURL: callbackUrl,
       });
     } catch (error) {
       console.error("Sign in failed:", error);
@@ -21,7 +24,6 @@ export function AuthCard() {
       setIsLoading(false);
     }
   };
-
   return (
     <div className="relative flex min-h-screen w-full flex-col items-center justify-center bg-black px-4 text-white overflow-hidden selection:bg-white selection:text-black">
       {/* Premium Minimal Dotted Grid Pattern */}
