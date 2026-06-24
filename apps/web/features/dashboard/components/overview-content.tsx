@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~
 import { MessageSquarePlus, FileText, GitPullRequest, Ship, ExternalLink, Sparkles } from "lucide-react";
 import { useSession } from "~/lib/auth-client";
 import { cn } from "~/lib/utils";
+import { GitHubConnectCard } from "./github-connect-card";
 
 interface MockRequest {
   id: string;
@@ -58,7 +59,11 @@ const mockRequests: MockRequest[] = [
   },
 ];
 
-export function OverviewContent() {
+interface OverviewContentProps {
+  isGitHubConnected?: boolean;
+}
+
+export function OverviewContent({ isGitHubConnected = false }: OverviewContentProps) {
   const { data: session } = useSession();
   const userName = session?.user?.name || "Developer";
 
@@ -128,71 +133,79 @@ export function OverviewContent() {
         })}
       </div>
 
-      {/* Recent Feature Requests List View */}
-      <div className="rounded-xl border border-[#2D2D2D] bg-[#202020] p-6 shadow-md">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-bold text-[#E3E3E3]">Active Feature Requests</h2>
-            <p className="text-xs text-[#9B9B9B] mt-0.5">
-              A list of feature requests that require review or action.
-            </p>
+      {/* Dashboard Grid Layout */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Recent Feature Requests List View */}
+        <div className="rounded-xl border border-[#2D2D2D] bg-[#202020] p-6 shadow-md lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-bold text-[#E3E3E3]">Active Feature Requests</h2>
+              <p className="text-xs text-[#9B9B9B] mt-0.5">
+                A list of feature requests that require review or action.
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <Table className="min-w-full">
+              <TableHeader className="border-b border-[#2D2D2D]">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="text-[#9B9B9B] font-semibold text-xs py-3">ID</TableHead>
+                  <TableHead className="text-[#9B9B9B] font-semibold text-xs py-3">Title</TableHead>
+                  <TableHead className="text-[#9B9B9B] font-semibold text-xs py-3">Status</TableHead>
+                  <TableHead className="text-[#9B9B9B] font-semibold text-xs py-3">Author</TableHead>
+                  <TableHead className="text-[#9B9B9B] font-semibold text-xs py-3">Date</TableHead>
+                  <TableHead className="text-[#9B9B9B] font-semibold text-xs py-3 text-right">PR</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {mockRequests.map((req) => {
+                  const badge = statusStyles[req.status];
+                  return (
+                    <TableRow key={req.id} className="border-b border-[#2D2D2D]/60 hover:bg-[#252525]/60 transition-colors">
+                      <TableCell className="font-mono text-xs text-[#9B9B9B] font-medium py-3.5">
+                        {req.id}
+                      </TableCell>
+                      <TableCell className="text-sm font-semibold text-[#E3E3E3] py-3.5">
+                        {req.title}
+                      </TableCell>
+                      <TableCell className="py-3.5">
+                        <span className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                          badge.bg,
+                          badge.text
+                        )}>
+                          <span className={cn("h-1.5 w-1.5 rounded-full", badge.dot)} />
+                          {badge.label}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs text-[#E3E3E3] py-3.5">
+                        {req.author}
+                      </TableCell>
+                      <TableCell className="text-xs text-[#9B9B9B] py-3.5">
+                        {req.date}
+                      </TableCell>
+                      <TableCell className="text-xs text-[#38BDF8] text-right font-medium py-3.5">
+                        {req.githubPr ? (
+                          <span className="inline-flex items-center gap-1 cursor-pointer hover:underline">
+                            {req.githubPr}
+                            <ExternalLink className="h-3 w-3" />
+                          </span>
+                        ) : (
+                          <span className="text-[#9B9B9B]/40">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <Table className="min-w-full">
-            <TableHeader className="border-b border-[#2D2D2D]">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="text-[#9B9B9B] font-semibold text-xs py-3">ID</TableHead>
-                <TableHead className="text-[#9B9B9B] font-semibold text-xs py-3">Title</TableHead>
-                <TableHead className="text-[#9B9B9B] font-semibold text-xs py-3">Status</TableHead>
-                <TableHead className="text-[#9B9B9B] font-semibold text-xs py-3">Author</TableHead>
-                <TableHead className="text-[#9B9B9B] font-semibold text-xs py-3">Date</TableHead>
-                <TableHead className="text-[#9B9B9B] font-semibold text-xs py-3 text-right">PR</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockRequests.map((req) => {
-                const badge = statusStyles[req.status];
-                return (
-                  <TableRow key={req.id} className="border-b border-[#2D2D2D]/60 hover:bg-[#252525]/60 transition-colors">
-                    <TableCell className="font-mono text-xs text-[#9B9B9B] font-medium py-3.5">
-                      {req.id}
-                    </TableCell>
-                    <TableCell className="text-sm font-semibold text-[#E3E3E3] py-3.5">
-                      {req.title}
-                    </TableCell>
-                    <TableCell className="py-3.5">
-                      <span className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                        badge.bg,
-                        badge.text
-                      )}>
-                        <span className={cn("h-1.5 w-1.5 rounded-full", badge.dot)} />
-                        {badge.label}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-xs text-[#E3E3E3] py-3.5">
-                      {req.author}
-                    </TableCell>
-                    <TableCell className="text-xs text-[#9B9B9B] py-3.5">
-                      {req.date}
-                    </TableCell>
-                    <TableCell className="text-xs text-[#38BDF8] text-right font-medium py-3.5">
-                      {req.githubPr ? (
-                        <span className="inline-flex items-center gap-1 cursor-pointer hover:underline">
-                          {req.githubPr}
-                          <ExternalLink className="h-3 w-3" />
-                        </span>
-                      ) : (
-                        <span className="text-[#9B9B9B]/40">—</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+        {/* GitHub integration card */}
+        <div className="lg:col-span-1 space-y-6">
+          <GitHubConnectCard isConnected={isGitHubConnected} />
         </div>
       </div>
     </div>

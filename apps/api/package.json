@@ -21,6 +21,8 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@octokit/app": "^16.1.2",
+    "@octokit/rest": "^22.0.1",
     "@repo/database": "workspace:*",
     "@repo/logger": "workspace:*",
     "@repo/trpc": "workspace:*",

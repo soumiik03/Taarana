@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  serverExternalPackages: ["@repo/database", "pg"],
   async rewrites() {
     return [
       {
