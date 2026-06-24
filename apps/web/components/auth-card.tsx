@@ -11,16 +11,26 @@ export function AuthCard() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
 
+  const [error, setError] = useState<string | null>(null);
+
   const handleGitHubSignIn = async () => {
     setIsLoading(true);
+    setError(null);
     try {
-      await signIn.social({
+      const result = await signIn.social({
         provider: "github",
         callbackURL: callbackUrl,
       });
-    } catch (error) {
-      console.error("Sign in failed:", error);
-    } finally {
+      // If signIn.social returns an error instead of redirecting
+      if (result?.error) {
+        console.error("Sign in error:", result.error);
+        setError(result.error.message || "Sign in failed. Please try again.");
+        setIsLoading(false);
+      }
+      // If we reach here without redirect, something went wrong
+    } catch (err) {
+      console.error("Sign in failed:", err);
+      setError("Failed to connect to authentication server. Please try again.");
       setIsLoading(false);
     }
   };
@@ -64,7 +74,7 @@ export function AuthCard() {
             </p>
           </div>
 
-          {/* Action Button */}
+           {/* Action Button */}
           <div className="space-y-4">
             <Button
               onClick={handleGitHubSignIn}
@@ -103,6 +113,11 @@ export function AuthCard() {
               )}
               Continue with GitHub
             </Button>
+            {error && (
+              <p className="text-center text-sm text-red-400 font-medium animate-in fade-in duration-300">
+                {error}
+              </p>
+            )}
           </div>
 
           {/* Footnote - centered and beautifully constrained */}

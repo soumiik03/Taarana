@@ -15,16 +15,22 @@ import { serverRouter, createContext } from "@repo/trpc/server";
 import { env } from "./env";
 
 export const app = express();
+app.set("trust proxy", 1);
 const openApiDocument = generateOpenApiDocument(serverRouter, {
   title: "Streamyst OpenAPI",
   version: "1.0.0",
   baseUrl: env.BASE_URL.concat("/api"),
 });
 
+const allowedOrigins = ["http://localhost:3000"];
+if (process.env.BETTER_AUTH_URL) {
+  allowedOrigins.push(process.env.BETTER_AUTH_URL.replace(/\/$/, ""));
+}
+
 if (env.NODE_ENV !== "prod") {
   app.use(
     cors({
-      origin: "http://localhost:3000",
+      origin: allowedOrigins,
       credentials: true,
     }),
   );
