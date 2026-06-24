@@ -1,9 +1,10 @@
 import { db, eq } from "@repo/database";
-import { organizationsTable, workspaceMembersTable, sessionTable } from "@repo/database/schema";
+import { organizationsTable, workspaceMembersTable, sessionTable, usersTable } from "@repo/database/schema";
 
 /**
  * Saves the GitHub App installation ID against the user's organization.
  * Looks up the user's first organization via workspace_members and updates it.
+ * If no organization exists, a default one is automatically created for the user.
  */
 export async function saveInstallationId(
   userId: string,
@@ -17,11 +18,46 @@ export async function saveInstallationId(
       .where(eq(workspaceMembersTable.userId, userId))
       .limit(1);
 
-    if (!membership.length || !membership[0]) {
-      return { success: false, error: "No organization found for this user" };
-    }
+    let organizationId: string;
 
-    const organizationId = membership[0].organizationId;
+    if (!membership.length || !membership[0]) {
+      const allOrgs = await db.select().from(organizationsTable).limit(1);
+      if (allOrgs.length && allOrgs[0]) {
+        organizationId = allOrgs[0].id;
+        await db.insert(workspaceMembersTable).values({
+          organizationId,
+          userId,
+          role: "admin",
+        });
+      } else {
+        // No organization exists in the database at all.
+        // Let's retrieve user details and auto-create a default workspace.
+        const userResult = await db
+          .select()
+          .from(usersTable)
+          .where(eq(usersTable.id, userId))
+          .limit(1);
+        
+        const userName = userResult[0]?.fullName || "Default";
+        const workspaceName = `${userName}'s Workspace`;
+        const workspaceSlug = `${userName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}-workspace-${Math.floor(Math.random() * 1000)}`;
+
+        const newOrg = await db.insert(organizationsTable).values({
+          name: workspaceName,
+          slug: workspaceSlug,
+        }).returning();
+
+        organizationId = newOrg[0]!.id;
+
+        await db.insert(workspaceMembersTable).values({
+          organizationId,
+          userId,
+          role: "admin",
+        });
+      }
+    } else {
+      organizationId = membership[0].organizationId;
+    }
 
     // Update the organization with the GitHub installation ID
     await db

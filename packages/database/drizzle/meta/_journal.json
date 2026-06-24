@@ -43,6 +43,13 @@
       "when": 1782220544799,
       "tag": "0005_account_scope_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782274230782,
+      "tag": "0006_missing_tables_and_columns",
+      "breakpoints": true
     }
   ]
 }

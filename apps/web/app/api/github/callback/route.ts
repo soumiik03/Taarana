@@ -14,10 +14,13 @@ export async function GET(request: NextRequest) {
   const installationId = searchParams.get("installation_id");
   const setupAction = searchParams.get("setup_action");
 
+  console.log(`[GitHub Callback] setupAction: ${setupAction}, installationId: ${installationId}`);
+
   // Validate required params
   if (!installationId) {
+    console.error("[GitHub Callback] Missing installation_id parameter");
     return NextResponse.redirect(
-      new URL("/dashboard?error=missing_installation_id", request.url)
+      new URL("/dashboard?error=missing_installation_id", getBaseURL(request))
     );
   }
 
@@ -25,45 +28,53 @@ export async function GET(request: NextRequest) {
     // Get the current user's session from cookies
     const cookieHeader = request.headers.get("cookie") ?? "";
     const sessionResponse = await fetch(
-      `${getBaseURL(request)}/api/auth/get-session`,
+      "http://localhost:8000/api/auth/get-session",
       {
         headers: { cookie: cookieHeader },
       }
     );
 
+    console.log(`[GitHub Callback] Session request status: ${sessionResponse.status}`);
+
     if (!sessionResponse.ok) {
+      console.warn("[GitHub Callback] Session request not OK");
       return NextResponse.redirect(
-        new URL("/sign-in?callbackUrl=/dashboard", request.url)
+        new URL("/sign-in?callbackUrl=/dashboard", getBaseURL(request))
       );
     }
 
     const session = await sessionResponse.json();
     const userId = session?.user?.id;
 
+    console.log(`[GitHub Callback] Session parsed. userId: ${userId}`);
+
     if (!userId) {
+      console.warn("[GitHub Callback] No userId in session, redirecting to sign-in");
       return NextResponse.redirect(
-        new URL("/sign-in?callbackUrl=/dashboard", request.url)
+        new URL("/sign-in?callbackUrl=/dashboard", getBaseURL(request))
       );
     }
 
     // Save the installation ID against the user's organization
+    console.log(`[GitHub Callback] Attempting to save installationId: ${installationId} for userId: ${userId}`);
     const result = await saveInstallationId(userId, parseInt(installationId, 10));
+    console.log(`[GitHub Callback] Save result:`, result);
 
     if (!result.success) {
       console.error("Failed to save installation:", result.error);
       return NextResponse.redirect(
-        new URL(`/dashboard?error=${encodeURIComponent(result.error || "install_failed")}`, request.url)
+        new URL(`/dashboard?error=${encodeURIComponent(result.error || "install_failed")}`, getBaseURL(request))
       );
     }
 
     // Success — redirect to dashboard with success indicator
     return NextResponse.redirect(
-      new URL("/dashboard?github=connected", request.url)
+      new URL("/dashboard?github=connected", getBaseURL(request))
     );
   } catch (error) {
     console.error("GitHub callback error:", error);
     return NextResponse.redirect(
-      new URL("/dashboard?error=callback_failed", request.url)
+      new URL("/dashboard?error=callback_failed", getBaseURL(request))
     );
   }
 }

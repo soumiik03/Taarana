@@ -1,5 +1,11 @@
 import { Suspense } from "react";
 import { AuthCard } from "~/components/auth-card";
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Sign In | Taarana AI",
+  description: "Sign in to your Taarana account to manage your code reviews.",
+};
 
 export default function SignInPage() {
   return (

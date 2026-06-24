@@ -18,8 +18,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Streamyst",
-  description: "Media Forwarding",
+  title: "Taarana AI - Smart PR Reviews & Code Analysis",
+  description: "Automate code reviews, sync GitHub repositories, and get advanced analytics for your workspaces with Taarana AI.",
 };
 
 export default function RootLayout({

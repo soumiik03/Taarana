@@ -1,4 +1,10 @@
 import { WorkspaceForm } from "../../../features/workspace/components/workspace-form";
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Create Workspace | Taarana AI",
+  description: "Create a new workspace for your team to start managing reviews.",
+};
 
 export default function CreateWorkspacePage() {
   return (

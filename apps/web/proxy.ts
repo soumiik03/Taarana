@@ -22,16 +22,48 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith(route)
   );
 
-  // Not logged in → redirect to sign-in with callback
-  if (isProtectedRoute && !sessionCookie) {
-    const signInUrl = new URL("/sign-in", request.url);
-    signInUrl.searchParams.set("callbackUrl", pathname);
-    return NextResponse.redirect(signInUrl);
+  let isValidSession = false;
+  if (sessionCookie) {
+    try {
+      // Fetch session directly from the local API server on port 8000
+      const res = await fetch("http://localhost:8000/api/auth/get-session", {
+        headers: { cookie: request.headers.get("cookie") ?? "" },
+      });
+      if (res.ok) {
+        const session = await res.json();
+        if (session?.user?.id) {
+          isValidSession = true;
+        }
+      }
+    } catch (e) {
+      console.error("Error validating session in proxy:", e);
+    }
   }
 
-  // Already logged in → don't show sign-in page
-  if (isAuthRoute && sessionCookie) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+  // Not logged in (or invalid session) → redirect to sign-in with callback and clear cookies
+  if (isProtectedRoute && !isValidSession) {
+    const signInUrl = new URL("/sign-in", request.url);
+    signInUrl.searchParams.set("callbackUrl", pathname);
+    const response = NextResponse.redirect(signInUrl);
+    
+    // Clean up invalid session cookies
+    response.cookies.delete("better-auth.session_token");
+    response.cookies.delete("__Secure-better-auth.session_token");
+    return response;
+  }
+
+  // Auth route handling
+  if (isAuthRoute) {
+    if (isValidSession) {
+      // Already logged in → redirect to dashboard
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    } else if (sessionCookie) {
+      // Stale/invalid cookie present → clear it so the sign-in page can render clean
+      const response = NextResponse.next();
+      response.cookies.delete("better-auth.session_token");
+      response.cookies.delete("__Secure-better-auth.session_token");
+      return response;
+    }
   }
 
   return NextResponse.next();

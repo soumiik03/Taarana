@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, text } from "drizzle-orm/pg-core";
 import { organizationsTable } from "./organization";
 import { usersTable } from "./user";
 
@@ -7,7 +7,7 @@ export const workspaceMembersTable = pgTable("workspace_members", {
   organizationId: uuid("organization_id")
     .notNull()
     .references(() => organizationsTable.id, { onDelete: "cascade" }),
-  userId: uuid("user_id")
+  userId: text("user_id")
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
   role: varchar("role", { length: 50 }).notNull().default("member"),

@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { router, publicProcedure } from "../../trpc";
+import { router, publicProcedure, protectedProcedure } from "../../trpc";
 import { db, eq } from "@repo/database";
 import { organizationsTable, workspaceMembersTable } from "@repo/database/schema";
 
 export const workspaceRouter = router({
-  create: publicProcedure
+  create: protectedProcedure
     .input(z.object({
       name: z.string().min(2).max(255),
       slug: z.string().min(2).max(255),
@@ -14,6 +14,13 @@ export const workspaceRouter = router({
         name: input.name,
         slug: input.slug,
       }).returning();
+
+      // Automatically add the creator as the admin of the workspace
+      await db.insert(workspaceMembersTable).values({
+        organizationId: org[0]!.id,
+        userId: ctx.user.id,
+        role: "admin",
+      });
 
       return org[0];
     }),

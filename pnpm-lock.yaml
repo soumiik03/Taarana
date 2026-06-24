@@ -416,6 +416,12 @@ importers:
 
   packages/trpc:
     dependencies:
+      '@octokit/app':
+        specifier: ^16.1.2
+        version: 16.1.2
+      '@octokit/rest':
+        specifier: ^22.0.1
+        version: 22.0.1
       '@repo/database':
         specifier: workspace:*
         version: link:../database
