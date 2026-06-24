@@ -103,24 +103,13 @@ export async function getInstallationId(
  * Checks if the current session's organization has a GitHub installation ID.
  */
 export async function getGitHubConnectionStatus(): Promise<boolean> {
-  const { cookies } = await import("next/headers");
-  const cookieStore = await cookies();
-  const sessionToken =
-    cookieStore.get("better-auth.session_token")?.value ??
-    cookieStore.get("__Secure-better-auth.session_token")?.value;
-
-  if (!sessionToken) return false;
-
   try {
-    const session = await db
-      .select({ userId: sessionTable.userId })
-      .from(sessionTable)
-      .where(eq(sessionTable.token, sessionToken))
-      .limit(1);
+    const { getServerSession } = await import("~/lib/auth-server");
+    const session = await getServerSession();
 
-    if (!session.length || !session[0]) return false;
+    if (!session || !session.user) return false;
 
-    const userId = session[0].userId;
+    const userId = session.user.id;
     const installationId = await getInstallationId(userId);
     return installationId !== null;
   } catch (error) {

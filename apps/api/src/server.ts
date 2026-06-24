@@ -36,10 +36,15 @@ if (env.NODE_ENV !== "prod") {
   );
 }
 
+import { inngestRoute } from "./routes/inngest";
+
 // Mount Better Auth handler BEFORE body-parsing middleware
 app.all("/api/auth/*splat", toNodeHandler(auth));
 
 app.use(express.json());
+
+// Mount Inngest handler
+app.use("/api/inngest", inngestRoute);
 
 app.get("/", (req, res) => {
   return res.json({ message: "Streamyst is up and running..." });

@@ -24,7 +24,7 @@ export const dashboardRoutes: RouteItem[] = [
   },
   {
     label: "Feature Requests",
-    href: "/dashboard/features",
+    href: "/dashboard/feature-requests",
     icon: Lightbulb,
   },
   {
