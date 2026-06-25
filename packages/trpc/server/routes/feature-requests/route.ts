@@ -5,9 +5,7 @@ import {
   featureRequestsTable,
   clarificationQuestionsTable,
 } from "@repo/database/schema";
-import { Inngest } from "inngest";
-
-const inngest = new Inngest({ id: "taarana-api" });
+import { inngest } from "@repo/inngest";
 
 export const featureRequestsRouter = router({
   create: publicProcedure

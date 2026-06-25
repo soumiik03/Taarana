@@ -5,6 +5,7 @@ import { workspaceRouter } from "./routes/workspace/route";
 import { githubRouter } from "./routes/github/route";
 import { featureRequestsRouter } from "./routes/feature-requests/route";
 import { prdRouter } from "./routes/prd/route";
+import { tasksRouter } from "./routes/tasks/route";
 
 export const serverRouter = router({
   health: healthRouter,
@@ -13,6 +14,7 @@ export const serverRouter = router({
   github: githubRouter,
   featureRequests: featureRequestsRouter,
   prd: prdRouter,
+  tasks:tasksRouter
 });
 
 export { createContext } from "./context";

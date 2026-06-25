@@ -1,19 +1,47 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { trpc } from "~/trpc/client";
 import { Button } from "~/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { Badge } from "~/components/ui/badge";
-import { MessageSquarePlus, ArrowRight, Clock } from "lucide-react";
+import { Card, CardContent, CardHeader } from "~/components/ui/card";
+import { ArrowRight, Clock, MessageSquarePlus } from "lucide-react";
 
-export function FeatureRequestsList({ organizationId }: { organizationId: string }) {
-  const { data: requests, isLoading } = trpc.featureRequests.getByOrg.useQuery({
-    organizationId,
-  });
+type FeatureRequest = {
+  id: string;
+  title: string;
+  status: string;
+  source: string;
+  createdAt: string | Date | null;
+};
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
+function RequestCard({ request }: { request: FeatureRequest }) {
+  const { data: prd } = trpc.prd.getByFeatureRequest.useQuery(
+    { featureRequestId: request.id },
+    {
+      enabled: request.status === "ready",
+      refetchInterval: (query) => (query.state.data ? false : 3000),
+    }
+  );
+
+  const createdAt = useMemo(() => {
+    if (!request.createdAt) return "-";
+    const date = new Date(request.createdAt);
+    return Number.isNaN(date.getTime())
+      ? "-"
+      : date.toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+  }, [request.createdAt]);
+
+  const canViewPrd = request.status === "ready" && !!prd?.id;
+  const canViewTasks = prd?.status === "approved" && !!prd.id;
+
+  const statusClass = (() => {
+    switch (request.status) {
       case "ready":
         return "border-emerald-500/30 bg-emerald-500/10 text-emerald-400";
       case "clarifying":
@@ -23,31 +51,107 @@ export function FeatureRequestsList({ organizationId }: { organizationId: string
       default:
         return "border-zinc-500/30 bg-zinc-500/10 text-zinc-400";
     }
-  };
+  })();
+
+  return (
+    <Card className="border-zinc-800 bg-zinc-900 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20">
+      <CardHeader className="border-b border-zinc-800/80 px-4 py-4">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={`capitalize ${statusClass}`}>
+              {request.status}
+            </Badge>
+            <Badge variant="outline" className="border-zinc-700 bg-zinc-950 text-zinc-300 capitalize">
+              {request.source}
+            </Badge>
+          </div>
+          <Link
+            href={`/dashboard/feature-requests/${request.id}`}
+            className="text-left text-base font-semibold text-white transition-colors hover:text-zinc-200"
+          >
+            {request.title}
+          </Link>
+          <div className="text-xs text-zinc-500">Created {createdAt}</div>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-wrap gap-2 px-4 py-4">
+        {canViewPrd && (
+          <Button
+            size="sm"
+            variant="outline"
+            render={<Link href={`/dashboard/prds/${prd.id}`} />}
+            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+          >
+            View PRD
+          </Button>
+        )}
+        {canViewTasks && (
+          <Button
+            size="sm"
+            variant="outline"
+            render={<Link href={`/dashboard/tasks/${prd.id}`} />}
+            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+          >
+            View Tasks
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          render={<Link href={`/dashboard/feature-requests/${request.id}`} />}
+          className="text-zinc-400 hover:bg-zinc-800 hover:text-white"
+        >
+          Open Request
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RequestsSkeleton() {
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div
+          key={index}
+          className="h-48 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900"
+        />
+      ))}
+    </div>
+  );
+}
+
+export function FeatureRequestsList({ organizationId }: { organizationId: string }) {
+  const { data: requests, isLoading } = trpc.featureRequests.getByOrg.useQuery({
+    organizationId,
+  });
 
   if (isLoading) {
     return (
-      <div className="space-y-6 animate-pulse">
-        <div className="flex justify-between items-center">
-          <div className="h-8 bg-zinc-800 rounded w-1/4"></div>
-          <div className="h-10 bg-zinc-800 rounded w-32"></div>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-6">
+          <div className="space-y-3">
+            <div className="h-8 w-56 animate-pulse rounded bg-zinc-800" />
+            <div className="h-4 w-96 animate-pulse rounded bg-zinc-800" />
+          </div>
+          <div className="h-10 w-36 animate-pulse rounded bg-zinc-800" />
         </div>
-        <div className="h-64 bg-zinc-900 rounded-xl border border-zinc-800"></div>
+        <RequestsSkeleton />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center border-b border-zinc-800 pb-6">
+      <div className="flex flex-col gap-4 border-b border-zinc-800 pb-6 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl font-extrabold text-white">Feature Requests</h1>
-          <p className="text-sm text-zinc-400 mt-1">
-            Manage your workspace requests and view AI generated clarification questions.
+          <p className="mt-1 text-sm text-zinc-400">
+            Review requests, open their PRDs, and jump into the task board once approved.
           </p>
         </div>
-        <Link href="/dashboard/feature-requests/new" passHref>
-          <Button className="bg-white text-black hover:bg-zinc-200 font-semibold flex items-center gap-2">
+        <Link href="/dashboard/feature-requests/new">
+          <Button className="flex items-center gap-2 bg-white font-semibold text-black hover:bg-zinc-200">
             <MessageSquarePlus className="h-4 w-4" />
             New Request
           </Button>
@@ -55,65 +159,23 @@ export function FeatureRequestsList({ organizationId }: { organizationId: string
       </div>
 
       {!requests || requests.length === 0 ? (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-12 text-center">
-          <Clock className="mx-auto h-12 w-12 text-zinc-600 mb-4" />
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-12 text-center shadow-sm">
+          <Clock className="mx-auto mb-4 h-12 w-12 text-zinc-600" />
           <h3 className="text-lg font-semibold text-white">No feature requests yet</h3>
-          <p className="text-zinc-500 text-sm mt-1 mb-6">
-            Create your first feature request to start gathering clarification context.
+          <p className="mt-1 mb-6 text-sm text-zinc-500">
+            Create your first feature request to start the AI workflow.
           </p>
-          <Link href="/dashboard/feature-requests/new" passHref>
-            <Button className="bg-zinc-900 border border-zinc-850 hover:bg-zinc-850 text-white font-medium">
-              Create Feature Request
+          <Link href="/dashboard/feature-requests/new">
+            <Button className="bg-zinc-900 text-white hover:bg-zinc-800">
+              Create your first feature request
             </Button>
           </Link>
         </div>
       ) : (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 overflow-hidden shadow-xl">
-          <Table>
-            <TableHeader className="bg-zinc-950 border-b border-zinc-800">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="text-zinc-400 font-semibold py-4 pl-6">Title</TableHead>
-                <TableHead className="text-zinc-400 font-semibold py-4">Status</TableHead>
-                <TableHead className="text-zinc-400 font-semibold py-4">Source</TableHead>
-                <TableHead className="text-zinc-400 font-semibold py-4">Created At</TableHead>
-                <TableHead className="text-zinc-400 font-semibold py-4 text-right pr-6"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {requests.map((req) => (
-                <TableRow key={req.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/40 transition-colors">
-                  <TableCell className="font-semibold text-white py-4 pl-6">
-                    {req.title}
-                  </TableCell>
-                  <TableCell className="py-4">
-                    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusColor(req.status)}`}>
-                      {req.status}
-                    </span>
-                  </TableCell>
-                  <TableCell className="py-4">
-                    <Badge variant="outline" className="text-zinc-400 capitalize bg-zinc-900/60 border-zinc-800">
-                      {req.source}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm text-zinc-400 py-4">
-                    {req.createdAt ? new Date(req.createdAt).toLocaleDateString(undefined, {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    }) : '—'}
-                  </TableCell>
-                  <TableCell className="py-4 text-right pr-6">
-                    <Link href={`/dashboard/feature-requests/${req.id}`} passHref>
-                      <Button size="sm" variant="ghost" className="text-zinc-400 hover:text-white hover:bg-zinc-900 flex items-center gap-1.5 font-medium">
-                        View Chat
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </Button>
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {requests.map((request) => (
+            <RequestCard key={request.id} request={request as FeatureRequest} />
+          ))}
         </div>
       )}
     </div>

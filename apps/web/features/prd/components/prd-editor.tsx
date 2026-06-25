@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "~/components/ui/button";
 import { trpc } from "~/trpc/client";
@@ -47,30 +48,23 @@ function EditableList({
 }
 
 export function PrdEditor({ prd }: { prd: SelectPrd }) {
+  const router = useRouter();
   const [problemStatement, setProblemStatement] = useState(
     prd.problemStatement ?? ""
   );
-  const [goals, setGoals] = useState<string[]>(
-    (prd.goals as string[]) ?? []
-  );
-  const [nonGoals, setNonGoals] = useState<string[]>(
-    (prd.nonGoals as string[]) ?? []
-  );
-  const [userStories, setUserStories] = useState<string[]>(
-    (prd.userStories as string[]) ?? []
-  );
-  const [acceptanceCriteria, setAcceptanceCriteria] = useState<string[]>(
-    (prd.acceptanceCriteria as string[]) ?? []
-  );
-  const [edgeCases, setEdgeCases] = useState<string[]>(
-    (prd.edgeCases as string[]) ?? []
-  );
-  const [successMetrics, setSuccessMetrics] = useState<string[]>(
-    (prd.successMetrics as string[]) ?? []
-  );
+  const [goals, setGoals] = useState<string[]>((prd.goals as string[]) ?? []);
+  const [nonGoals, setNonGoals] = useState<string[]>((prd.nonGoals as string[]) ?? []);
+  const [userStories, setUserStories] = useState<string[]>((prd.userStories as string[]) ?? []);
+  const [acceptanceCriteria, setAcceptanceCriteria] = useState<string[]>((prd.acceptanceCriteria as string[]) ?? []);
+  const [edgeCases, setEdgeCases] = useState<string[]>((prd.edgeCases as string[]) ?? []);
+  const [successMetrics, setSuccessMetrics] = useState<string[]>((prd.successMetrics as string[]) ?? []);
 
   const update = trpc.prd.update.useMutation();
-  const approve = trpc.prd.approve.useMutation();
+  const approve = trpc.prd.approve.useMutation({
+    onSuccess: (data) => {
+      router.push(`/dashboard/tasks/${data.id}`);
+    },
+  });
 
   const handleSave = () => {
     update.mutate({

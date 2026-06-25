@@ -12,9 +12,16 @@ export function ClarificationChat({ featureRequestId }: { featureRequestId: stri
 
   const utils = trpc.useUtils();
 
-  const { data: questions, isLoading } = trpc.featureRequests.getQuestions.useQuery({
-    featureRequestId,
-  });
+  const { data: questions, isLoading } = trpc.featureRequests.getQuestions.useQuery(
+    { featureRequestId },
+    {
+      refetchInterval: (query) => {
+        const qs = query.state.data;
+        if (!qs || qs.length === 0) return 3000;
+        return qs.every((q) => q.status === "answered") ? 3000 : false;
+      },
+    }
+  );
 
   const allAnswered = Boolean(
     questions?.length && questions.every((question) => question.status === "answered")

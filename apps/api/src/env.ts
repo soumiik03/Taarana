@@ -9,6 +9,9 @@ const envSchema = z.object({
   GITHUB_WEBHOOK_SECRET: z.string(),
   GITHUB_CLIENT_ID: z.string(),
   GITHUB_CLIENT_SECRET: z.string(),
+  OPENROUTER_API_KEY: z.string(),
+  INNGEST_EVENT_KEY: z.string().optional(),
+  INNGEST_SIGNING_KEY: z.string().optional(),
 });
 
 function createEnv(env: NodeJS.ProcessEnv) {

@@ -43,7 +43,7 @@ Title: ${featureRequest.title}
 Description: ${featureRequest.description}
 
 If the feature request is clear enough to be actionable by a development team, return an empty JSON array [].
-If the feature request needs clarification, ask 1 to 3 clarifying questions.
+If the feature request needs clarification, ask exactly 3 clarifying questions.
 Format your output EXACTLY as a JSON array of strings.
 Example if clear: []
 Example if unclear: ["What specific user roles will have access to this?", "Do we need to support export to CSV?"]

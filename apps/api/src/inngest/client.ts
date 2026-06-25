@@ -1,4 +1,1 @@
-import { Inngest } from "inngest";
-
-// Create a client to send and receive events
-export const inngest = new Inngest({ id: "taarana-api" });
+export { inngest } from "@repo/inngest";

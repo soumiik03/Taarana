@@ -64,6 +64,20 @@
       "when": 1782361861696,
       "tag": "0008_adorable_domino",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782368795593,
+      "tag": "0009_low_ares",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782390742528,
+      "tag": "0010_mysterious_raider",
+      "breakpoints": true
     }
   ]
 }

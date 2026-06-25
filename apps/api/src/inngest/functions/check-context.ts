@@ -35,12 +35,15 @@ export const checkFeatureRequestContext = inngest.createFunction(
 
     if (!featureRequest) return { error: "Not found" };
 
-    const aiDecision = await step.run("decide-context", async () => {
-      if (!process.env.OPENROUTER_API_KEY) {
-        throw new Error("OPENROUTER_API_KEY is not configured");
-      }
+    let aiDecision = "READY";
 
-      const qnaText = questions
+    if (questions.length < 6) {
+      aiDecision = await step.run("decide-context", async () => {
+        if (!process.env.OPENROUTER_API_KEY) {
+          throw new Error("OPENROUTER_API_KEY is not configured");
+        }
+
+        const qnaText = questions
         .map((q, i) => `Q${i + 1}: ${q.question}\nA${i + 1}: ${q.answer || "No answer"}`)
         .join("\n\n");
 
@@ -63,6 +66,7 @@ Do not include anything except READY or the single follow-up question.`;
 
       return text.trim();
     });
+    }
 
     if (aiDecision === "READY" || aiDecision.includes("READY")) {
       await step.run("mark-ready", async () => {

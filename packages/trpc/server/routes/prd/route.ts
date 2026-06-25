@@ -2,9 +2,7 @@ import { z } from "zod";
 import { router, publicProcedure } from "../../trpc";
 import { db, eq } from "@repo/database";
 import { featureRequestsTable, prdsTable } from "@repo/database/schema";
-import { Inngest } from "inngest";
-
-const inngest = new Inngest({ id: "taarana-api" });
+import { inngest } from "@repo/inngest";
 
 export const prdRouter = router({
     getById: publicProcedure
@@ -108,6 +106,17 @@ export const prdRouter = router({
                 .set({ status: "approved" })
                 .where(eq(prdsTable.id, input.id))
                 .returning();
-            return result[0];
+
+            const prd = result[0];
+            if (!prd) {
+                throw new Error("PRD not found");
+            }
+
+            await inngest.send({
+                name: "tasks/generate",
+                data: { prdId: prd.id },
+            });
+
+            return prd;
         }),
 });
