@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import Image from "next/image";
 import { dashboardRoutes } from "../lib/routes";
 import { WorkspaceSwitcher } from "~/features/workspace/components/workspace-switcher";
 import { UserMenu } from "~/components/user/user-menu";
@@ -25,6 +24,17 @@ const mockWorkspaces = [
   { id: "2", name: "Acme Corp", slug: "acme" },
 ];
 
+function isRouteActive(pathname: string, route: { label: string; href: string }) {
+  if (route.label === "PRD Editor") {
+    return pathname.startsWith("/dashboard/prds");
+  }
+
+  return (
+    pathname === route.href ||
+    (route.href !== "/dashboard" && pathname.startsWith(route.href))
+  );
+}
+
 export function DashboardSidebar() {
   const pathname = usePathname();
 
@@ -39,7 +49,6 @@ export function DashboardSidebar() {
         </div>
       </SidebarHeader>
 
-      {/* Sidebar Content */}
       <SidebarContent className="px-2 py-4">
         <SidebarGroup>
           <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-wider text-[#9B9B9B] mb-2 px-3">
@@ -49,12 +58,10 @@ export function DashboardSidebar() {
             <SidebarMenu>
               {dashboardRoutes.map((route) => {
                 const Icon = route.icon;
-                const isActive =
-                  pathname === route.href ||
-                  (route.href !== "/dashboard" && pathname.startsWith(route.href));
+                const isActive = isRouteActive(pathname, route);
 
                 return (
-                  <SidebarMenuItem key={route.href}>
+                  <SidebarMenuItem key={`${route.label}-${route.href}`}>
                     <SidebarMenuButton
                       render={<Link href={route.href} />}
                       isActive={isActive}
@@ -76,7 +83,6 @@ export function DashboardSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      {/* Sidebar Footer */}
       <SidebarFooter className="border-t border-[#2D2D2D] p-3 bg-[#1A1A1A]">
         <UserMenu />
       </SidebarFooter>

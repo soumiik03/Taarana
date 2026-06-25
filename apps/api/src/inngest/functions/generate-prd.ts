@@ -4,18 +4,43 @@ import { prdsTable, featureRequestsTable, clarificationQuestionsTable } from "@r
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { buildPrdPrompt } from "../utils/prd-prompt";
+import { OPENROUTER_MODEL, asStringArray, parseJsonFromText } from "../utils/ai";
 
 const openrouter = createOpenAI({
     baseURL: "https://openrouter.ai/api/v1",
-    apiKey: process.env.OPENROUTER_API_KEY!,
+    apiKey: process.env.OPENROUTER_API_KEY,
 });
+
+type PrdAiResponse = {
+    problemStatement?: unknown;
+    goals?: unknown;
+    nonGoals?: unknown;
+    userStories?: unknown;
+    acceptanceCriteria?: unknown;
+    edgeCases?: unknown;
+    successMetrics?: unknown;
+};
+
+function normalizePrdResponse(response: PrdAiResponse) {
+    return {
+        problemStatement:
+            typeof response.problemStatement === "string"
+                ? response.problemStatement.trim()
+                : "",
+        goals: asStringArray(response.goals),
+        nonGoals: asStringArray(response.nonGoals),
+        userStories: asStringArray(response.userStories),
+        acceptanceCriteria: asStringArray(response.acceptanceCriteria),
+        edgeCases: asStringArray(response.edgeCases),
+        successMetrics: asStringArray(response.successMetrics),
+    };
+}
 
 export const generatePrdFunction = inngest.createFunction(
     { id: "generate-prd", triggers: [{ event: "prd/generate" }] },
     async ({ event, step }) => {
         const { featureRequestId } = event.data;
 
-        // Step 1 — fetch feature request
         const featureRequest = await step.run("fetch-feature-request", async () => {
             const result = await db
                 .select()
@@ -26,7 +51,13 @@ export const generatePrdFunction = inngest.createFunction(
 
         if (!featureRequest) throw new Error("Feature request not found");
 
-        // Step 2 — fetch all answered clarification questions
+        await step.run("mark-prd-generating", async () => {
+            await db
+                .update(prdsTable)
+                .set({ status: "draft" })
+                .where(eq(prdsTable.featureRequestId, featureRequestId));
+        });
+
         const questions = await step.run("fetch-questions", async () => {
             return db
                 .select()
@@ -40,8 +71,11 @@ export const generatePrdFunction = inngest.createFunction(
             .filter((q) => q.answer)
             .map((q) => ({ question: q.question, answer: q.answer! }));
 
-        // Step 3 — call OpenRouter to generate PRD
         const prdJson = await step.run("generate-prd-ai", async () => {
+            if (!process.env.OPENROUTER_API_KEY) {
+                throw new Error("OPENROUTER_API_KEY is not configured");
+            }
+
             const prompt = buildPrdPrompt(
                 featureRequest.title,
                 featureRequest.description,
@@ -49,33 +83,41 @@ export const generatePrdFunction = inngest.createFunction(
             );
 
             const { text } = await generateText({
-                model: openrouter("mistralai/mistral-7b-instruct"),
+                model: openrouter(OPENROUTER_MODEL),
                 prompt,
+                temperature: 0.2,
             });
 
-            return JSON.parse(text.trim());
+            return normalizePrdResponse(parseJsonFromText<PrdAiResponse>(text));
         });
 
-        // Step 4 — save PRD to DB
         const prd = await step.run("save-prd", async () => {
-            const result = await db
+            const values = {
+                ...prdJson,
+                status: "draft" as const,
+            };
+
+            const updated = await db
+                .update(prdsTable)
+                .set(values)
+                .where(eq(prdsTable.featureRequestId, featureRequestId))
+                .returning();
+
+            if (updated[0]) {
+                return updated[0];
+            }
+
+            const inserted = await db
                 .insert(prdsTable)
                 .values({
                     featureRequestId,
-                    problemStatement: prdJson.problemStatement,
-                    goals: prdJson.goals,
-                    nonGoals: prdJson.nonGoals,
-                    userStories: prdJson.userStories,
-                    acceptanceCriteria: prdJson.acceptanceCriteria,
-                    edgeCases: prdJson.edgeCases,
-                    successMetrics: prdJson.successMetrics,
-                    status: "draft",
+                    ...values,
                 })
                 .returning();
-            return result[0];
+
+            return inserted[0];
         });
 
-        // Step 5 — update feature request status to ready
         await step.run("update-feature-status", async () => {
             await db
                 .update(featureRequestsTable)

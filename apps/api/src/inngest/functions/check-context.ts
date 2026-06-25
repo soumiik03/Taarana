@@ -6,7 +6,7 @@ import {
   featureRequestsTable,
   clarificationQuestionsTable,
 } from "@repo/database/schema";
-import { env } from "../../env";
+import { OPENROUTER_MODEL } from "../utils/ai";
 
 const openrouter = createOpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -16,9 +16,7 @@ const openrouter = createOpenAI({
 export const checkFeatureRequestContext = inngest.createFunction(
   { id: "check-feature-request-context", triggers: [{ event: "feature-request/check-context" }] },
   async ({ event, step }) => {
-    try {
-      require("fs").appendFileSync("j:/Projects/AI/Taarana/scratch/check-log.txt", `\n[${new Date().toISOString()}] Started check-context for ${event.data.featureRequestId}\n`);
-      const { featureRequestId } = event.data;
+    const { featureRequestId } = event.data;
 
     const featureRequest = await step.run("fetch-request", async () => {
       const result = await db
@@ -38,6 +36,10 @@ export const checkFeatureRequestContext = inngest.createFunction(
     if (!featureRequest) return { error: "Not found" };
 
     const aiDecision = await step.run("decide-context", async () => {
+      if (!process.env.OPENROUTER_API_KEY) {
+        throw new Error("OPENROUTER_API_KEY is not configured");
+      }
+
       const qnaText = questions
         .map((q, i) => `Q${i + 1}: ${q.question}\nA${i + 1}: ${q.answer || "No answer"}`)
         .join("\n\n");
@@ -49,13 +51,14 @@ Description: ${featureRequest.description}
 Clarifications:
 ${qnaText}
 
-If the context is now complete and actionable for developers, respond exactly with "READY".
+If the context is now complete and actionable for developers, respond exactly with READY.
 If there are still ambiguities that need more clarification, ask exactly 1 follow-up question.
-If no further clarification is needed, just say "READY". Do not include any other text.`;
+Do not include anything except READY or the single follow-up question.`;
 
       const { text } = await generateText({
-        model: openrouter("openai/gpt-oss-120b:free"),
+        model: openrouter(OPENROUTER_MODEL),
         prompt,
+        temperature: 0.2,
       });
 
       return text.trim();
@@ -70,7 +73,6 @@ If no further clarification is needed, just say "READY". Do not include any othe
       });
       return { status: "ready" };
     } else {
-      // The AI asked a follow-up question
       await step.run("add-followup", async () => {
         await db.insert(clarificationQuestionsTable).values({
           featureRequestId,
@@ -79,10 +81,6 @@ If no further clarification is needed, just say "READY". Do not include any othe
         });
       });
       return { status: "clarifying", followup: aiDecision };
-    }
-    } catch (e: any) {
-      require("fs").appendFileSync("j:/Projects/AI/Taarana/scratch/check-log.txt", `\n[${new Date().toISOString()}] Error: ${e.message}\n${e.stack}\n`);
-      throw e;
     }
   }
 );

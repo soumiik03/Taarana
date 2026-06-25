@@ -63,3 +63,4 @@ export const dashboardRoutes: RouteItem[] = [
     icon: Settings,
   },
 ];
+

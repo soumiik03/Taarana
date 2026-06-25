@@ -1,17 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { trpc } from "~/trpc/client";
 import { Button } from "~/components/ui/button";
 
 export function ClarificationChat({ featureRequestId }: { featureRequestId: string }) {
+  const router = useRouter();
   const [answerInput, setAnswerInput] = useState("");
-  
+  const hasTriggeredPrd = useRef(false);
+
   const utils = trpc.useUtils();
-  
+
   const { data: questions, isLoading } = trpc.featureRequests.getQuestions.useQuery({
     featureRequestId,
   });
+
+  const allAnswered = Boolean(
+    questions?.length && questions.every((question) => question.status === "answered")
+  );
+
+  const { data: request } = trpc.featureRequests.getById.useQuery(
+    { id: featureRequestId },
+    {
+      enabled: allAnswered,
+      refetchInterval: (query) =>
+        query.state.data?.status === "ready" ? false : 3000,
+    }
+  );
+
+  const triggerPrd = trpc.prd.trigger.useMutation({
+    onSuccess: (prd) => {
+      router.push(`/dashboard/prds/${prd.id}`);
+    },
+    onError: () => {
+      hasTriggeredPrd.current = false;
+    },
+  });
+
+  useEffect(() => {
+    if (!allAnswered || request?.status !== "ready" || hasTriggeredPrd.current) {
+      return;
+    }
+
+    hasTriggeredPrd.current = true;
+    triggerPrd.mutate({ featureRequestId });
+  }, [allAnswered, featureRequestId, request?.status, triggerPrd]);
 
   const submitAnswer = trpc.featureRequests.submitAnswer.useMutation({
     onSuccess: () => {
@@ -36,6 +70,11 @@ export function ClarificationChat({ featureRequestId }: { featureRequestId: stri
   return (
     <div className="flex flex-col gap-6 mt-6">
       <h3 className="text-lg font-semibold text-white border-b border-zinc-800 pb-2">AI Clarifications</h3>
+      {triggerPrd.isPending && (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+          Starting PRD generation...
+        </div>
+      )}
       <div className="flex flex-col gap-4">
         {questions.map((q, idx) => {
           const isPending = q.status === "pending";
