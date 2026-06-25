@@ -7,7 +7,7 @@ export async function getServerSession() {
 
     if (!cookieHeader) return null;
 
-    const res = await fetch("http://localhost:8000/api/auth/get-session", {
+    const res = await fetch("http://127.0.0.1:8000/api/auth/get-session", {
       headers: { cookie: cookieHeader },
       cache: "no-store",
     });

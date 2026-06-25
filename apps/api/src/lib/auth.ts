@@ -5,6 +5,7 @@ import * as schema from "@repo/database/schema";
 
 
 export const auth = betterAuth({
+  baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
@@ -18,6 +19,12 @@ export const auth = betterAuth({
     fields: {
       name: "fullName",
       image: "profileImageUrl",
+    },
+  },
+  account: {
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ["github"],
     },
   },
   socialProviders: {

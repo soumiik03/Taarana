@@ -4,7 +4,10 @@ import cors from "cors";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./lib/auth";
 
-// add this after app.use(express.json())
+
+
+
+
 
 import * as trpcExpress from "@trpc/server/adapters/express";
 import { generateOpenApiDocument, createOpenApiExpressMiddleware } from "trpc-to-openapi";
@@ -39,7 +42,7 @@ if (env.NODE_ENV !== "prod") {
 import { inngestRoute } from "./routes/inngest";
 
 // Mount Better Auth handler BEFORE body-parsing middleware
-app.all("/api/auth/*splat", toNodeHandler(auth));
+app.all("/api/auth/{*path}", toNodeHandler(auth));
 
 app.use(express.json());
 
@@ -77,5 +80,4 @@ app.use(
     createContext,
   }),
 );
-
 export default app;

@@ -1,7 +1,7 @@
 import { serve } from "inngest/express";
 import { inngest } from "../inngest/client";
 import { clarifyFeatureRequest } from "../inngest/functions/clarify-request";
-
+import { generatePrdFunction } from "../inngest/functions/generate-prd";
 import { checkFeatureRequestContext } from "../inngest/functions/check-context";
 
 export const inngestRoute = serve({
@@ -9,5 +9,6 @@ export const inngestRoute = serve({
   functions: [
     clarifyFeatureRequest,
     checkFeatureRequestContext,
+    generatePrdFunction
   ],
 });

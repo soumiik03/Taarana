@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     // Get the current user's session from cookies
     const cookieHeader = request.headers.get("cookie") ?? "";
     const sessionResponse = await fetch(
-      "http://localhost:8000/api/auth/get-session",
+      "http://127.0.0.1:8000/api/auth/get-session",
       {
         headers: { cookie: cookieHeader },
       }

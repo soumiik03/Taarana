@@ -26,7 +26,7 @@ export async function proxy(request: NextRequest) {
   if (sessionCookie) {
     try {
       // Fetch session directly from the local API server on port 8000
-      const res = await fetch("http://localhost:8000/api/auth/get-session", {
+      const res = await fetch("http://127.0.0.1:8000/api/auth/get-session", {
         headers: { cookie: request.headers.get("cookie") ?? "" },
       });
       if (res.ok) {

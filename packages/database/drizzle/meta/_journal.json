@@ -50,6 +50,20 @@
       "when": 1782274230782,
       "tag": "0006_missing_tables_and_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782307895381,
+      "tag": "0007_small_the_initiative",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782361861696,
+      "tag": "0008_adorable_domino",
+      "breakpoints": true
     }
   ]
 }
