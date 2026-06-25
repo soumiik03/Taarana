@@ -20,6 +20,8 @@ import {
     "clarifying",
     "ready",
     "rejected",
+    "fix-needed",
+    "ready-for-approval"
   ]);
   
   export const featureRequestsTable = pgTable("feature_requests", {

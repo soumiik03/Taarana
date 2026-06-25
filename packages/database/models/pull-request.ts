@@ -19,6 +19,10 @@ export const pullRequestsTable = pgTable("pull_requests", {
   url: varchar("url", { length: 255 }).notNull(),
   featureRequestId: uuid("feature_request_id")
     .references(() => featureRequestsTable.id, { onDelete: "set null" }),
+  repoOwner: text("repo_owner").notNull(),
+  repoName: text("repo_name").notNull(),
+  prNumber: integer("pr_number").notNull(),
+  headSha: text("head_sha").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
 });

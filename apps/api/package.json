@@ -33,8 +33,11 @@
     "ai": "^6.0.209",
     "better-auth": "^1.6.20",
     "cors": "^2.8.5",
+    "drizzle-orm": "^0.45.1",
     "express": "^5.2.1",
     "inngest": "^4.11.0",
+    "octokit": "^5.0.5",
+    "openai": "^6.45.0",
     "trpc-to-openapi": "^3.1.0",
     "zod": "^4.3.5"
   }
