@@ -1,4 +1,4 @@
-﻿import OpenAI from "openai";
+import OpenAI from "openai";
 import { buildReviewPrompt } from "./review-prompt";
 
 const openai = new OpenAI({
@@ -13,12 +13,12 @@ export type ReviewIssue = {
 };
 
 export async function generateReviewForChunk(
-    prd: Record<string, any>,
+    prdContext: string[],
     filename: string,
     codeDiff: string
 ): Promise<ReviewIssue[]> {
     // 1. Build the prompt with full PRD
-    const prompt = buildReviewPrompt(filename, codeDiff, prd);
+    const prompt = buildReviewPrompt(filename, codeDiff, prdContext);
 
     // 2. Call the AI
     const response = await openai.chat.completions.create({

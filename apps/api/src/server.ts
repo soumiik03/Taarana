@@ -40,9 +40,13 @@ if (env.NODE_ENV !== "prod") {
 }
 
 import { inngestRoute } from "./routes/inngest";
+import { githubWebhookRoute } from "./routes/github-webhook";
 
 // Mount Better Auth handler BEFORE body-parsing middleware
 app.all("/api/auth/{*path}", toNodeHandler(auth));
+
+// Mount Webhook handler BEFORE body-parsing middleware so it can read raw text body
+app.use("/api/github/webhook", githubWebhookRoute);
 
 app.use(express.json());
 

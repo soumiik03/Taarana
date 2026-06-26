@@ -1,4 +1,4 @@
-﻿import { inngest } from "../client";
+import { inngest } from "../client";
 import { db } from "@repo/database";
 import { pullRequestsTable, featureRequestsTable, prdsTable, organizationsTable } from "@repo/database/schema";
 import { eq } from "drizzle-orm";
@@ -55,9 +55,19 @@ export const reviewPRFunction = inngest.createFunction(
     // Step 4: Run AI review on each chunk using the full PRD
     const allIssues: { filename: string; line: number | null; comment: string; type: string }[] = [];
 
+    const prdContext = [
+      `Problem Statement: ${(prd as any).problemStatement || "None"}`,
+      `Goals: ${((prd as any).goals || []).join(", ")}`,
+      `Acceptance Criteria: ${((prd as any).acceptanceCriteria || []).join(", ")}`,
+      `User Stories: ${((prd as any).userStories || []).join(", ")}`,
+      `Edge Cases: ${((prd as any).edgeCases || []).join(", ")}`,
+      `Non-Goals: ${((prd as any).nonGoals || []).join(", ")}`,
+      `Success Metrics: ${((prd as any).successMetrics || []).join(", ")}`
+    ];
+
     for (const chunk of chunks) {
       const issues = await step.run(`review-chunk-${chunk.filename}`, async () => {
-        return generateReviewForChunk(prd as Record<string, any>, chunk.filename, chunk.chunk);
+        return generateReviewForChunk(prdContext, chunk.filename, chunk.chunk);
       });
 
       issues.forEach((issue: ReviewIssue) => {

@@ -2,6 +2,9 @@
   "name": "@repo/inngest",
   "version": "1.0.0",
   "main": "./src/client.ts",
+  "exports": {
+    ".": "./src/client.ts"
+  },
   "dependencies": {
     "inngest": "^4.11.0"
   }

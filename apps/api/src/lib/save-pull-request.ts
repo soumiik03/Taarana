@@ -1,9 +1,8 @@
 import { db, eq, or } from "@repo/database";
 import { pullRequestsTable, featureRequestsTable } from "@repo/database/schema";
-import type { GitHubPullRequestPayload } from "../types/review";
 import { triggerReview } from "./trigger-review";
 
-export async function savePullRequestAndLinkFeature(payload: GitHubPullRequestPayload) {
+export async function savePullRequestAndLinkFeature(payload: any) {
   const pr = payload.pull_request;
 
   // Check if we already have it
@@ -43,6 +42,11 @@ export async function savePullRequestAndLinkFeature(payload: GitHubPullRequestPa
     }
   }
 
+  const repoOwner = payload.repository.owner.login;
+  const repoName = payload.repository.name;
+  const prNumber = pr.number;
+  const headSha = pr.head.sha;
+
   // Upsert the PR
   if (existingPr.length > 0) {
     await db
@@ -54,6 +58,10 @@ export async function savePullRequestAndLinkFeature(payload: GitHubPullRequestPa
         status: pr.state,
         url: pr.html_url,
         featureRequestId: featureRequestId,
+        repoOwner,
+        repoName,
+        prNumber,
+        headSha,
         updatedAt: new Date(),
       })
       .where(eq(pullRequestsTable.githubId, pr.id));
@@ -69,6 +77,10 @@ export async function savePullRequestAndLinkFeature(payload: GitHubPullRequestPa
         status: pr.state,
         url: pr.html_url,
         featureRequestId: featureRequestId,
+        repoOwner,
+        repoName,
+        prNumber,
+        headSha,
       });
   }
 
