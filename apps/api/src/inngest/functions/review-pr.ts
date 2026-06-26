@@ -10,39 +10,44 @@ import { postReviewComments } from "../utils/pr-comment";
 export const reviewPRFunction = inngest.createFunction(
   { id: "review-pr", name: "AI QA Review PR", triggers: [{ event: "github/pr.received" }] },
   async ({ event, step }) => {
-    const { prId, featureRequestId } = event.data as {
+    const { prId, featureRequestId, installationId } = event.data as {
       prId: number;
-      featureRequestId: string;
+      featureRequestId: string | null;
+      installationId?: number;
     };
 
     // Step 1: Fetch everything we need from DB
     const { pr, featureRequest, prd, org } = await step.run("fetch-context", async () => {
       const [pr] = await db.select().from(pullRequestsTable).where(eq(pullRequestsTable.githubId, prId));
-      const [featureRequest] = await db.select().from(featureRequestsTable).where(eq(featureRequestsTable.id, featureRequestId));
       
-      if (!pr || !featureRequest) {
-        throw new Error("Missing PR or feature request context");
-      }
-      
-      const [prd] = await db.select().from(prdsTable).where(eq(prdsTable.featureRequestId, featureRequestId));
-      
-      if (!prd) {
-         throw new Error("Missing PRD");
+      if (!pr) {
+        throw new Error("Missing PR context");
       }
 
-      const [org] = await db.select().from(organizationsTable).where(eq(organizationsTable.id, featureRequest.organizationId!));
+      let featureRequest = null;
+      let prd = null;
+      let org = null;
 
-      if (!org) {
-        throw new Error("Missing organization context");
+      if (featureRequestId) {
+        [featureRequest] = await db.select().from(featureRequestsTable).where(eq(featureRequestsTable.id, featureRequestId));
+        if (featureRequest) {
+          [prd] = await db.select().from(prdsTable).where(eq(prdsTable.featureRequestId, featureRequestId));
+          [org] = await db.select().from(organizationsTable).where(eq(organizationsTable.id, featureRequest.organizationId!));
+        }
       }
 
       return { pr, featureRequest, prd, org };
     });
 
+    const githubInstallationId = org?.githubInstallationId || installationId;
+    if (!githubInstallationId) {
+      throw new Error("Missing githubInstallationId to fetch PR diff");
+    }
+
     // Step 2: Fetch the diff from GitHub
     const files = await step.run("fetch-diff", async () => {
       return getPRDiff(
-        org.githubInstallationId!,
+        githubInstallationId,
         pr.repoOwner,
         pr.repoName,
         pr.prNumber
@@ -55,7 +60,7 @@ export const reviewPRFunction = inngest.createFunction(
     // Step 4: Run AI review on each chunk using the full PRD
     const allIssues: { filename: string; line: number | null; comment: string; type: string }[] = [];
 
-    const prdContext = [
+    const prdContext = prd ? [
       `Problem Statement: ${(prd as any).problemStatement || "None"}`,
       `Goals: ${((prd as any).goals || []).join(", ")}`,
       `Acceptance Criteria: ${((prd as any).acceptanceCriteria || []).join(", ")}`,
@@ -63,6 +68,9 @@ export const reviewPRFunction = inngest.createFunction(
       `Edge Cases: ${((prd as any).edgeCases || []).join(", ")}`,
       `Non-Goals: ${((prd as any).nonGoals || []).join(", ")}`,
       `Success Metrics: ${((prd as any).successMetrics || []).join(", ")}`
+    ] : [
+      `PR Title: ${pr.title || "None"}`,
+      `PR Description: ${pr.description || "None"}`
     ];
 
     for (const chunk of chunks) {
@@ -78,7 +86,7 @@ export const reviewPRFunction = inngest.createFunction(
     // Step 5: Post comments to GitHub
     await step.run("post-comments", async () => {
       await postReviewComments(
-        org.githubInstallationId!,
+        githubInstallationId,
         pr.repoOwner,
         pr.repoName,
         pr.prNumber,
@@ -88,17 +96,19 @@ export const reviewPRFunction = inngest.createFunction(
     });
 
     // Step 6: Update feature request status based on whether blocking issues exist
-    await step.run("update-status", async () => {
-      const hasBlockingIssues = allIssues.some((i) => i.type === "blocking");
+    if (featureRequestId) {
+      await step.run("update-status", async () => {
+        const hasBlockingIssues = allIssues.some((i) => i.type === "blocking");
 
-      await db
-        .update(featureRequestsTable)
-        .set({
-          status: hasBlockingIssues ? "fix-needed" : "ready-for-approval",
-          updatedAt: new Date(),
-        })
-        .where(eq(featureRequestsTable.id, featureRequestId));
-    });
+        await db
+          .update(featureRequestsTable)
+          .set({
+            status: hasBlockingIssues ? "fix-needed" : "ready-for-approval",
+            updatedAt: new Date(),
+          })
+          .where(eq(featureRequestsTable.id, featureRequestId));
+      });
+    }
 
     return {
       totalIssues: allIssues.length,

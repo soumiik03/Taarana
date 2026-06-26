@@ -5,12 +5,13 @@ import {
   timestamp,
   text,
   integer,
+  bigint,
 } from "drizzle-orm/pg-core";
 import { featureRequestsTable } from "./feature-request";
 
 export const pullRequestsTable = pgTable("pull_requests", {
   id: uuid("id").primaryKey().defaultRandom(),
-  githubId: integer("github_id").notNull().unique(),
+  githubId: bigint("github_id", { mode: "number" }).notNull().unique(),
   number: integer("number").notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
