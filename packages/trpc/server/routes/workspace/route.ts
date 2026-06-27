@@ -34,4 +34,22 @@ export const workspaceRouter = router({
         .where(eq(workspaceMembersTable.userId, input.userId));
       return memberships;
     }),
+
+  getUserWorkspaces: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.user.id;
+    const orgs = await db
+      .select({
+        id: organizationsTable.id,
+        name: organizationsTable.name,
+        slug: organizationsTable.slug,
+        logoUrl: organizationsTable.logoUrl,
+      })
+      .from(workspaceMembersTable)
+      .innerJoin(
+        organizationsTable,
+        eq(workspaceMembersTable.organizationId, organizationsTable.id)
+      )
+      .where(eq(workspaceMembersTable.userId, userId));
+    return orgs;
+  }),
 });

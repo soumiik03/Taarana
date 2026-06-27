@@ -19,10 +19,7 @@ import {
   SidebarMenuButton,
 } from "~/components/ui/sidebar";
 
-const mockWorkspaces = [
-  { id: "1", name: "Taarana Team", slug: "taarana" },
-  { id: "2", name: "Acme Corp", slug: "acme" },
-];
+import { trpc } from "~/trpc/client";
 
 function isRouteActive(pathname: string, route: { label: string; href: string }) {
   if (route.label === "PRD Editor") {
@@ -37,15 +34,26 @@ function isRouteActive(pathname: string, route: { label: string; href: string })
 
 export function DashboardSidebar() {
   const pathname = usePathname();
+  const { data: workspaces, isLoading } = trpc.workspace.getUserWorkspaces.useQuery();
+
+  const currentWorkspace = workspaces?.[0] || {
+    id: "fallback",
+    name: "My Workspace",
+    slug: "workspace",
+  };
 
   return (
     <Sidebar className="border-r border-[#2D2D2D] bg-[#1F1F1F]">
       <SidebarHeader className="border-b border-[#2D2D2D]/60 p-2">
         <div className="px-1">
-          <WorkspaceSwitcher
-            workspaces={mockWorkspaces}
-            currentWorkspace={mockWorkspaces[0]!}
-          />
+          {isLoading ? (
+            <div className="h-10 w-full animate-pulse rounded bg-zinc-800" />
+          ) : (
+            <WorkspaceSwitcher
+              workspaces={workspaces || []}
+              currentWorkspace={currentWorkspace}
+            />
+          )}
         </div>
       </SidebarHeader>
 

@@ -13,21 +13,22 @@ export async function createContext({ req, res }: CreateExpressContextOptions) {
   }
 
   try {
-    const session = await db
-      .select({ userId: sessionTable.userId })
-      .from(sessionTable)
-      .where(eq(sessionTable.token, sessionToken))
-      .limit(1);
+    const authRes = await fetch("http://127.0.0.1:8000/api/auth/get-session", {
+      headers: { cookie: cookies },
+    });
 
-    if (!session.length || !session[0]) {
-      return { user: null };
+    if (authRes.ok) {
+      const session = await authRes.json();
+      if (session?.user?.id) {
+        return {
+          user: {
+            id: session.user.id,
+          },
+        };
+      }
     }
-
-    return {
-      user: {
-        id: session[0].userId,
-      },
-    };
+    
+    return { user: null };
   } catch (error) {
     console.error("tRPC context auth error:", error);
     return { user: null };

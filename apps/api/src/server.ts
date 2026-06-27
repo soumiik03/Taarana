@@ -58,7 +58,7 @@ app.get("/", (req, res) => {
 });
 
 app.get("/health", (req, res) => {
-  return res.json({ message: "Streamyst server is healthy", healthy: true });
+  return res.json({ message: "Streamyst server is healthy", healthy: true, headers: req.headers, protocol: req.protocol, hostname: req.hostname, url: req.url });
 });
 
 logger.debug(`openapi.json: ${env.BASE_URL}/openapi.json`);
