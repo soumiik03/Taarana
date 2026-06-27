@@ -95,6 +95,14 @@ function RequestCard({ request }: { request: FeatureRequest }) {
             View Tasks
           </Button>
         )}
+        {request.status === "ready-for-approval" && (
+          <Link
+            href={`/dashboard/approval/${request.id}`}
+            className="text-xs px-3 py-1.5 rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 hover:bg-yellow-500/20"
+          >
+            Review & Approve →
+          </Link>
+        )}
         <Button
           size="sm"
           variant="ghost"

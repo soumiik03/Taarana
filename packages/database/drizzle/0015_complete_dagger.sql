@@ -1,0 +1,1 @@
+ALTER TYPE "public"."feature_request_status" ADD VALUE 'shipped';

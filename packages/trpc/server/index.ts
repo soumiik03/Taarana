@@ -7,6 +7,7 @@ import { featureRequestsRouter } from "./routes/feature-requests/route";
 import { prdRouter } from "./routes/prd/route";
 import { tasksRouter } from "./routes/tasks/route";
 import { pullRequestsRouter } from "./routes/pull-requests/route";
+import { approvalRouter } from "./routes/approval/route";
 
 export const serverRouter = router({
   health: healthRouter,
@@ -17,6 +18,7 @@ export const serverRouter = router({
   prd: prdRouter,
   tasks: tasksRouter,
   pullRequest: pullRequestsRouter,
+  approval: approvalRouter,
 });
 
 export { createContext } from "./context";
