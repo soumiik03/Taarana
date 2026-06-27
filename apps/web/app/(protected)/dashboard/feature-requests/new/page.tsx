@@ -33,7 +33,7 @@ export default async function NewFeatureRequestPage() {
           to gather enough context before generating a PRD.
         </p>
       </div>
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-8">
+      <div className="rounded-2xl border border-[#2D2D2D] bg-[#202020] p-8">
         <RequestForm organizationId={organizationId} />
       </div>
     </div>

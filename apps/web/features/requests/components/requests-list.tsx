@@ -1,12 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
 import { trpc } from "~/trpc/client";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardHeader } from "~/components/ui/card";
-import { ArrowRight, Clock, MessageSquarePlus } from "lucide-react";
+import { ArrowRight, Clock, MessageSquarePlus, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "~/components/ui/alert-dialog";
 
 type FeatureRequest = {
   id: string;
@@ -24,6 +35,16 @@ function RequestCard({ request }: { request: FeatureRequest }) {
       refetchInterval: (query) => (query.state.data ? false : 3000),
     }
   );
+
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const utils = trpc.useContext();
+  const deleteMutation = trpc.featureRequests.delete.useMutation({
+    onSuccess: () => {
+      utils.featureRequests.getByOrg.invalidate();
+      utils.pullRequest.getOverview.invalidate();
+      setIsConfirmOpen(false);
+    },
+  });
 
   const createdAt = useMemo(() => {
     if (!request.createdAt) return "-";
@@ -57,13 +78,57 @@ function RequestCard({ request }: { request: FeatureRequest }) {
     <Card className="border-zinc-800 bg-zinc-900 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20">
       <CardHeader className="border-b border-zinc-800/80 px-4 py-4">
         <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className={`capitalize ${statusClass}`}>
-              {request.status}
-            </Badge>
-            <Badge variant="outline" className="border-zinc-700 bg-zinc-950 text-zinc-300 capitalize">
-              {request.source}
-            </Badge>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className={`capitalize ${statusClass}`}>
+                {request.status}
+              </Badge>
+              <Badge variant="outline" className="border-zinc-700 bg-zinc-950 text-zinc-300 capitalize">
+                {request.source}
+              </Badge>
+            </div>
+            
+            <AlertDialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+              <AlertDialogTrigger
+                render={
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setIsConfirmOpen(true);
+                    }}
+                    disabled={deleteMutation.isPending}
+                    className="text-zinc-500 hover:text-red-400 p-1.5 rounded transition-colors"
+                    title="Delete request"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                }
+              />
+              <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-white">Delete Feature Request</AlertDialogTitle>
+                  <AlertDialogDescription className="text-zinc-400">
+                    Are you sure you want to delete this feature request? This will permanently delete its PRD, acceptance criteria, and all generated tasks. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={() => setIsConfirmOpen(false)} className="border-zinc-800 bg-zinc-900 text-white hover:bg-zinc-800">
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-red-650 text-white hover:bg-red-700"
+                    disabled={deleteMutation.isPending}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteMutation.mutate({ id: request.id });
+                    }}
+                  >
+                    {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
           <Link
             href={`/dashboard/feature-requests/${request.id}`}

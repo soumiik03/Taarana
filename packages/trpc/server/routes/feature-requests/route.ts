@@ -163,4 +163,13 @@ export const featureRequestsRouter = router({
 
       return question;
     }),
+
+  delete: publicProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ input }) => {
+      await db
+        .delete(featureRequestsTable)
+        .where(eq(featureRequestsTable.id, input.id));
+      return { success: true };
+    }),
 });
