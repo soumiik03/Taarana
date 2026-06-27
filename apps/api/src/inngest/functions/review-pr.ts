@@ -1,10 +1,18 @@
 import { inngest } from "../client";
 import { db } from "@repo/database";
-import { pullRequestsTable, featureRequestsTable, prdsTable, organizationsTable } from "@repo/database/schema";
+import {
+  pullRequestsTable,
+  featureRequestsTable,
+  prdsTable,
+  organizationsTable,
+  tasksTable,
+  reviewsTable,
+  reviewIssuesTable,
+} from "@repo/database/schema";
 import { eq } from "drizzle-orm";
 import { getPRDiff } from "../utils/pr-files";
 import { chunkDiff } from "../utils/chunk-code";
-import { generateReviewForChunk, ReviewIssue } from "../utils/generate-review";
+import { generateReviewForChunk } from "../utils/generate-review";
 import { postReviewComments } from "../utils/pr-comment";
 
 export const reviewPRFunction = inngest.createFunction(
@@ -17,7 +25,7 @@ export const reviewPRFunction = inngest.createFunction(
     };
 
     // Step 1: Fetch everything we need from DB
-    const { pr, featureRequest, prd, org } = await step.run("fetch-context", async () => {
+    const { pr, featureRequest, prd, org, tasks } = await step.run("fetch-context", async () => {
       const [pr] = await db.select().from(pullRequestsTable).where(eq(pullRequestsTable.githubId, prId));
       
       if (!pr) {
@@ -27,16 +35,20 @@ export const reviewPRFunction = inngest.createFunction(
       let featureRequest = null;
       let prd = null;
       let org = null;
+      let tasks: any[] = [];
 
       if (featureRequestId) {
         [featureRequest] = await db.select().from(featureRequestsTable).where(eq(featureRequestsTable.id, featureRequestId));
         if (featureRequest) {
           [prd] = await db.select().from(prdsTable).where(eq(prdsTable.featureRequestId, featureRequestId));
           [org] = await db.select().from(organizationsTable).where(eq(organizationsTable.id, featureRequest.organizationId!));
+          if (prd) {
+            tasks = await db.select().from(tasksTable).where(eq(tasksTable.prdId, prd.id));
+          }
         }
       }
 
-      return { pr, featureRequest, prd, org };
+      return { pr, featureRequest, prd, org, tasks };
     });
 
     const githubInstallationId = org?.githubInstallationId || installationId;
@@ -57,8 +69,9 @@ export const reviewPRFunction = inngest.createFunction(
     // Step 3: Chunk the diff
     const chunks = chunkDiff(files);
 
-    // Step 4: Run AI review on each chunk using the full PRD
-    const allIssues: { filename: string; line: number | null; comment: string; type: string }[] = [];
+    // Step 4: Run AI review on each chunk using the full PRD and task list context
+    const allIssues: { filename: string | null; line: number | null; title: string; severity: string; whyItMatters: string; suggestedFix: string; expectedResult: string }[] = [];
+    let mergedAssessment = "";
 
     const prdContext = prd ? [
       `Problem Statement: ${(prd as any).problemStatement || "None"}`,
@@ -73,17 +86,108 @@ export const reviewPRFunction = inngest.createFunction(
       `PR Description: ${pr.description || "None"}`
     ];
 
+    const tasksListStr = tasks && tasks.length > 0 
+      ? tasks.map((t: any) => `- Task: ${t.title}\n  Description: ${t.description || "None"}\n  Status: ${t.status}`).join("\n")
+      : "No engineering tasks found.";
+
     for (const chunk of chunks) {
-      const issues = await step.run(`review-chunk-${chunk.filename}`, async () => {
-        return generateReviewForChunk(prdContext, chunk.filename, chunk.chunk);
+      const result = await step.run(`review-chunk-${chunk.filename}`, async () => {
+        return generateReviewForChunk(prdContext, tasksListStr, chunk.filename, chunk.chunk);
       });
 
-      issues.forEach((issue: ReviewIssue) => {
-        allIssues.push({ ...issue, filename: chunk.filename });
-      });
+      if (result) {
+        if (result.overallAssessment) {
+          mergedAssessment = mergedAssessment 
+            ? `${mergedAssessment}\n\n${result.overallAssessment}`
+            : result.overallAssessment;
+        }
+        if (result.issues) {
+          result.issues.forEach((issue: any) => {
+            allIssues.push({
+              title: issue.title,
+              severity: issue.severity,
+              whyItMatters: issue.whyItMatters,
+              filename: issue.file || chunk.filename,
+              line: issue.line,
+              suggestedFix: issue.suggestedFix,
+              expectedResult: issue.expectedResult,
+            });
+          });
+        }
+      }
     }
 
-    // Step 5: Post comments to GitHub
+    // Step 5: Deduplicate findings (same title and same file)
+    const uniqueIssuesMap = new Map<string, typeof allIssues[number]>();
+    for (const issue of allIssues) {
+      const fileKey = issue.filename || "";
+      const key = `${issue.title.toLowerCase().trim()}|${fileKey.toLowerCase().trim()}`;
+      if (!uniqueIssuesMap.has(key)) {
+        uniqueIssuesMap.set(key, issue);
+      }
+    }
+    const deduplicatedIssues = Array.from(uniqueIssuesMap.values());
+
+    // Step 6: Calculate Review Score
+    let score = 100;
+    for (const issue of deduplicatedIssues) {
+      const sev = issue.severity.toLowerCase();
+      if (sev === "blocking") score -= 25;
+      else if (sev === "high") score -= 15;
+      else if (sev === "medium") score -= 8;
+      else if (sev === "low") score -= 3;
+      else if (sev === "suggestion") score -= 1;
+    }
+    score = Math.max(0, Math.min(100, score));
+
+    const hasBlocking = deduplicatedIssues.some((i) => i.severity.toLowerCase() === "blocking");
+    const overallStatus = hasBlocking ? "fix-needed" : "ready-for-approval";
+
+    // Enforce approval text when zero blocking issues exist
+    if (!hasBlocking && !mergedAssessment.includes("No blocking issues found. Ready for approval.")) {
+      if (!mergedAssessment || mergedAssessment === "Failed to parse overall assessment." || mergedAssessment === "No overall assessment provided.") {
+        mergedAssessment = "No blocking issues found. Ready for approval.";
+      } else {
+        mergedAssessment = `${mergedAssessment}\n\nNo blocking issues found. Ready for approval.`;
+      }
+    }
+
+    // Step 7: Save Review and Issues to database
+    await step.run("save-review-db", async () => {
+      const [newReview] = await db
+        .insert(reviewsTable)
+        .values({
+          pullRequestId: pr.id,
+          commitSha: pr.headSha,
+          overallAssessment: mergedAssessment,
+          score,
+          status: overallStatus,
+        })
+        .returning();
+
+      if (!newReview) {
+        throw new Error("Failed to insert review into database");
+      }
+
+      if (deduplicatedIssues.length > 0) {
+        await db.insert(reviewIssuesTable).values(
+          deduplicatedIssues.map((issue) => ({
+            reviewId: newReview.id,
+            title: issue.title,
+            severity: issue.severity.toLowerCase(),
+            whyItMatters: issue.whyItMatters,
+            file: issue.filename,
+            line: issue.line,
+            suggestedFix: issue.suggestedFix,
+            expectedResult: issue.expectedResult,
+          }))
+        );
+      }
+
+      return newReview;
+    });
+
+    // Step 8: Post comments to GitHub
     await step.run("post-comments", async () => {
       await postReviewComments(
         githubInstallationId,
@@ -91,19 +195,32 @@ export const reviewPRFunction = inngest.createFunction(
         pr.repoName,
         pr.prNumber,
         pr.headSha,
-        allIssues
+        deduplicatedIssues.map((issue) => ({
+          filename: issue.filename || "",
+          line: issue.line,
+          comment: `**Title:** ${issue.title}
+**Severity:** ${issue.severity.toUpperCase()}
+
+**Why It Matters:**
+${issue.whyItMatters}
+
+**Suggested Fix:**
+${issue.suggestedFix}
+
+**Expected Result:**
+${issue.expectedResult}`,
+          type: issue.severity.toLowerCase() === "blocking" ? "blocking" : "non-blocking",
+        }))
       );
     });
 
-    // Step 6: Update feature request status based on whether blocking issues exist
+    // Step 9: Update feature request status based on current run results only
     if (featureRequestId) {
       await step.run("update-status", async () => {
-        const hasBlockingIssues = allIssues.some((i) => i.type === "blocking");
-
         await db
           .update(featureRequestsTable)
           .set({
-            status: hasBlockingIssues ? "fix-needed" : "ready-for-approval",
+            status: overallStatus,
             updatedAt: new Date(),
           })
           .where(eq(featureRequestsTable.id, featureRequestId));
@@ -111,8 +228,10 @@ export const reviewPRFunction = inngest.createFunction(
     }
 
     return {
-      totalIssues: allIssues.length,
-      blockingCount: allIssues.filter((i) => i.type === "blocking").length,
+      totalIssues: deduplicatedIssues.length,
+      blockingCount: deduplicatedIssues.filter((i) => i.severity.toLowerCase() === "blocking").length,
+      score,
+      status: overallStatus,
     };
   }
 );

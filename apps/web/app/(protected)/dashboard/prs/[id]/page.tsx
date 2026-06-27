@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { trpc } from "~/trpc/client";
@@ -10,6 +10,7 @@ import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "~/components/ui/accordion";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import {
   GitPullRequest,
   Lightbulb,
@@ -79,12 +80,14 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
 
   const { pr, featureRequest, prd, tasks } = ctx;
 
+  const [selectedReview, setSelectedReview] = useState<any>(null);
+
   // Visual stages for Workflow Timeline
   const isClarified = featureRequest && featureRequest.status !== "pending" && featureRequest.status !== "clarifying";
   const isPrdApproved = prd && prd.status === "approved";
   const isTasksGenerated = tasks && tasks.length > 0;
   const isPrOpen = pr.status === "open" || pr.status === "closed";
-  const isPrReviewed = reviewHistory && reviewHistory.iterations && reviewHistory.iterations.length > 0;
+  const isPrReviewed = !!reviewHistory?.latest;
   const isFixNeeded = featureRequest && featureRequest.status === "fix-needed";
   const isApproved = featureRequest && featureRequest.status === "ready-for-approval";
   const isShipped = pr.status === "closed";
@@ -100,11 +103,11 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
     { label: "Shipped", completed: isShipped, active: isApproved && !isShipped, details: isShipped ? "Merged into prod" : "Ready to merge" },
   ];
 
-  // Latest iteration comments represent current active issues
-  const latestIteration = reviewHistory?.iterations?.[0];
-  const activeIssues = reviewHistory?.allIssues || [];
-  const blockingIssues = activeIssues.filter(issue => issue.type === "blocking");
-  const nonBlockingIssues = activeIssues.filter(issue => issue.type === "non-blocking");
+  // Latest review represents current active issues
+  const latestReview = reviewHistory?.latest;
+  const activeIssues = latestReview?.issues || [];
+  const blockingIssues = activeIssues.filter(issue => issue.severity === "blocking");
+  const nonBlockingIssues = activeIssues.filter(issue => issue.severity !== "blocking");
 
   return (
     <div className="space-y-6 mx-auto max-w-6xl px-4 py-8">
@@ -206,64 +209,148 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent className="pt-4">
+            <CardContent className="pt-4 space-y-6">
+              {/* AI Review Summary Block */}
+              {latestReview ? (
+                <div className="space-y-6">
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Status Card */}
+                    <div className="bg-[#252525] p-4 rounded-xl border border-[#2D2D2D] flex flex-col justify-center">
+                      <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Overall Status</span>
+                      <div className={cn(
+                        "text-sm font-bold mt-1.5 flex items-center gap-1.5",
+                        latestReview.status === "ready-for-approval" ? "text-emerald-400" : "text-rose-400"
+                      )}>
+                        {latestReview.status === "ready-for-approval" ? (
+                          <>
+                            <CheckCircle2 className="h-4.5 w-4.5 text-emerald-400" />
+                            Ready for Approval
+                          </>
+                        ) : (
+                          <>
+                            <AlertTriangle className="h-4.5 w-4.5 text-rose-400" />
+                            Fix Required
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Score Card */}
+                    <div className="bg-[#252525] p-4 rounded-xl border border-[#2D2D2D] flex flex-col justify-center">
+                      <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Merge Readiness</span>
+                      <div className="flex items-baseline gap-1.5 mt-1.5">
+                        <span className="text-lg font-extrabold text-[#818CF8]">{latestReview.score}%</span>
+                        <span className="text-[10px] text-zinc-500">({latestReview.score}/100)</span>
+                      </div>
+                      <div className="w-full bg-zinc-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div 
+                          className={cn(
+                            "h-full rounded-full transition-all duration-500",
+                            latestReview.score >= 80 ? "bg-emerald-500" :
+                            latestReview.score >= 50 ? "bg-amber-500" : "bg-rose-500"
+                          )} 
+                          style={{ width: `${latestReview.score}%` }} 
+                        />
+                      </div>
+                    </div>
+
+                    {/* Breakdown Card */}
+                    <div className="bg-[#252525] p-4 rounded-xl border border-[#2D2D2D] flex flex-col justify-center">
+                      <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Issue Breakdown</span>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        <Badge variant="outline" className="text-[9px] bg-rose-500/10 text-rose-400 border-rose-500/20 px-1.5 py-0.5">
+                          {blockingIssues.length} Blocking
+                        </Badge>
+                        <Badge variant="outline" className="text-[9px] bg-orange-500/10 text-orange-400 border-orange-500/20 px-1.5 py-0.5">
+                          {activeIssues.filter(i => i.severity === "high").length} High
+                        </Badge>
+                        <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/20 px-1.5 py-0.5">
+                          {activeIssues.filter(i => i.severity === "medium").length} Med
+                        </Badge>
+                        <Badge variant="outline" className="text-[9px] bg-yellow-500/10 text-yellow-400 border-yellow-500/20 px-1.5 py-0.5">
+                          {activeIssues.filter(i => i.severity === "low").length} Low
+                        </Badge>
+                        <Badge variant="outline" className="text-[9px] bg-blue-500/10 text-blue-400 border-blue-500/20 px-1.5 py-0.5">
+                          {activeIssues.filter(i => i.severity === "suggestion").length} Sug
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Assessment Card */}
+                  <div className="bg-[#252525] p-4 rounded-xl border border-[#2D2D2D] space-y-1">
+                    <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Overall Assessment</span>
+                    <p className="text-xs text-[#E3E3E3] leading-relaxed whitespace-pre-wrap">
+                      {latestReview.overallAssessment}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
               {activeIssues.length === 0 ? (
                 <div className="text-center py-12 border border-dashed border-[#2D2D2D] rounded-xl text-zinc-400 text-sm">
                   {isHistoryLoading ? "Checking comments..." : "🎉 No issues found on this PR. Clean codebase!"}
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {/* Blocking issues list */}
-                  {blockingIssues.length > 0 && (
-                    <div className="space-y-3">
-                      <h4 className="text-xs font-bold text-rose-400 flex items-center gap-1">
-                        <AlertTriangle className="h-4 w-4" />
-                        Blocking Issues
-                      </h4>
-                      {blockingIssues.map((issue) => (
-                        <div key={issue.id} className="p-4 rounded-xl border border-rose-500/20 bg-rose-500/5 space-y-2">
-                          <div className="flex justify-between items-start gap-2 flex-wrap">
-                            <span className="text-[10px] font-mono text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded break-all">
-                              {issue.filename}:{issue.line}
-                            </span>
-                            <a href={issue.htmlUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#38BDF8] hover:underline inline-flex items-center gap-0.5">
-                              View Diff <ExternalLink className="h-2.5 w-2.5" />
-                            </a>
+                <div className="space-y-4 border-t border-[#2D2D2D] pt-4">
+                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Review Findings</h4>
+                  <div className="space-y-4">
+                    {activeIssues.map((issue) => (
+                      <div key={issue.id} className={cn(
+                        "p-4 rounded-xl border space-y-3.5 text-xs transition-colors",
+                        issue.severity === "blocking" ? "border-rose-500/20 bg-rose-500/5 hover:border-rose-500/30" :
+                        issue.severity === "high" ? "border-orange-500/20 bg-orange-500/5 hover:border-orange-500/30" :
+                        issue.severity === "medium" ? "border-amber-500/20 bg-amber-500/5 hover:border-amber-500/30" :
+                        issue.severity === "low" ? "border-yellow-500/20 bg-yellow-500/5 hover:border-yellow-500/30" :
+                        "border-zinc-700 bg-zinc-800/10 hover:border-zinc-600"
+                      )}>
+                        <div className="flex justify-between items-start gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <Badge className={cn(
+                              "text-[8px] font-extrabold uppercase px-1.5 py-0.5",
+                              issue.severity === "blocking" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" :
+                              issue.severity === "high" ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
+                              issue.severity === "medium" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
+                              issue.severity === "low" ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" :
+                              "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                            )}>
+                              {issue.severity}
+                            </Badge>
+                            <span className="font-bold text-white text-xs">{issue.title}</span>
                           </div>
-                          <p className="text-xs text-[#E3E3E3] leading-relaxed">
-                            {issue.comment}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {blockingIssues.length > 0 && nonBlockingIssues.length > 0 && <Separator className="bg-[#2D2D2D]/60" />}
-
-                  {/* Non-blocking issues list */}
-                  {nonBlockingIssues.length > 0 && (
-                    <div className="space-y-3">
-                      <h4 className="text-xs font-bold text-amber-400 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        Non-blocking Suggestions
-                      </h4>
-                      {nonBlockingIssues.map((issue) => (
-                        <div key={issue.id} className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 space-y-2">
-                          <div className="flex justify-between items-start gap-2 flex-wrap">
-                            <span className="text-[10px] font-mono text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded break-all">
-                              {issue.filename}:{issue.line}
+                          {issue.file && (
+                            <span className="text-[9px] font-mono text-zinc-400 bg-zinc-900/80 px-1.5 py-0.5 rounded break-all">
+                              {issue.file}{issue.line ? `:${issue.line}` : ""}
                             </span>
-                            <a href={issue.htmlUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#38BDF8] hover:underline inline-flex items-center gap-0.5">
-                              View Diff <ExternalLink className="h-2.5 w-2.5" />
-                            </a>
-                          </div>
-                          <p className="text-xs text-[#E3E3E3] leading-relaxed">
-                            {issue.comment}
-                          </p>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  )}
+
+                        <div className="space-y-2.5 text-xs">
+                          <div>
+                            <span className="text-[9px] uppercase font-mono text-zinc-500 block font-bold">Why It Matters</span>
+                            <p className="text-zinc-300 mt-0.5 leading-relaxed">{issue.whyItMatters}</p>
+                          </div>
+
+                          {issue.suggestedFix && (
+                            <div>
+                              <span className="text-[9px] uppercase font-mono text-zinc-500 block font-bold">Suggested Fix</span>
+                              <pre className="text-xs text-emerald-400 mt-0.5 leading-relaxed bg-zinc-950 p-2.5 rounded-lg border border-[#2D2D2D]/60 font-mono whitespace-pre-wrap">
+                                {issue.suggestedFix}
+                              </pre>
+                            </div>
+                          )}
+
+                          {issue.expectedResult && (
+                            <div>
+                              <span className="text-[9px] uppercase font-mono text-zinc-500 block font-bold">Expected Result</span>
+                              <p className="text-zinc-300 mt-0.5 leading-relaxed">{issue.expectedResult}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -379,65 +466,58 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
               </div>
             </CardHeader>
             <CardContent className="pt-4">
-              {!reviewHistory || !reviewHistory.iterations || reviewHistory.iterations.length === 0 ? (
+              {!reviewHistory || !reviewHistory.history || reviewHistory.history.length === 0 ? (
                 <div className="text-center py-12 text-zinc-400 text-sm">
-                  {isHistoryLoading ? "Loading review history..." : "No commit reviews recorded yet."}
+                  {isHistoryLoading ? "Loading review history..." : "No reviews recorded yet."}
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {reviewHistory.iterations.map((iter, idx) => (
-                    <div key={iter.sha} className="flex gap-4 items-start relative">
-                      {idx !== reviewHistory.iterations.length - 1 && (
-                        <div className="absolute top-8 bottom-0 left-4.5 w-0.5 bg-[#2D2D2D] -translate-x-1/2" />
-                      )}
-                      <div className={cn(
-                        "h-9 w-9 rounded-full border shrink-0 flex items-center justify-center z-10",
-                        iter.status === "passed" ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-rose-500/10 border-rose-500/30 text-rose-400"
-                      )}>
-                        <FileCheck className="h-4.5 w-4.5" />
-                      </div>
-                      <div className="flex-1 space-y-1 bg-[#252525] p-4 rounded-xl border border-[#2D2D2D] hover:border-zinc-700 transition-colors">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <span className="text-[10px] font-mono text-[#9B9B9B]">
-                            Commit: {iter.sha.slice(0, 7)}
-                          </span>
-                          <span className="text-[10px] text-[#9B9B9B]">
-                            {new Date(iter.timestamp).toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="text-xs font-bold text-white">
-                          {iter.message}
-                        </div>
-                        <div className="text-[11px] text-zinc-400">
-                          By {iter.author}
-                        </div>
-                        <p className="text-xs text-[#E3E3E3] mt-2 leading-relaxed italic bg-zinc-950 p-2 rounded-lg border border-[#2D2D2D]/60">
-                          {iter.summary}
-                        </p>
+                  {reviewHistory.history.map((iter: any, idx: number) => {
+                    const blockingCount = iter.issues.filter((i: any) => i.severity === "blocking").length;
+                    const totalCount = iter.issues.length;
 
-                        {/* Inline comments for this iteration */}
-                        {iter.issues && iter.issues.length > 0 && (
-                          <div className="mt-3 space-y-2 border-t border-[#2D2D2D] pt-3">
-                            <span className="text-[10px] font-bold text-[#9B9B9B] uppercase tracking-wider">Comments on Commit</span>
-                            {iter.issues.map((issue: any) => (
-                              <div key={issue.id} className="text-xs p-2 rounded bg-zinc-900 border border-zinc-800/80 flex flex-col gap-1">
-                                <div className="flex justify-between gap-1 flex-wrap">
-                                  <span className="font-mono text-[9px] text-[#38BDF8] break-all">{issue.filename}:{issue.line}</span>
-                                  <span className={cn(
-                                    "text-[8px] font-bold uppercase px-1 rounded",
-                                    issue.type === "blocking" ? "bg-rose-500/20 text-rose-300" : "bg-amber-500/20 text-amber-300"
-                                  )}>
-                                    {issue.type}
-                                  </span>
-                                </div>
-                                <p className="text-zinc-300 leading-normal">{issue.comment}</p>
-                              </div>
-                            ))}
-                          </div>
+                    return (
+                      <div key={iter.id} className="flex gap-4 items-start relative cursor-pointer" onClick={() => setSelectedReview(iter)}>
+                        {idx !== reviewHistory.history.length - 1 && (
+                          <div className="absolute top-8 bottom-0 left-4.5 w-0.5 bg-[#2D2D2D] -translate-x-1/2" />
                         )}
+                        <div className={cn(
+                          "h-9 w-9 rounded-full border shrink-0 flex items-center justify-center z-10 transition-colors",
+                          iter.status === "ready-for-approval" ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20" : "bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20"
+                        )}>
+                          <FileCheck className="h-4.5 w-4.5" />
+                        </div>
+                        <div className="flex-1 space-y-1 bg-[#252525] p-4 rounded-xl border border-[#2D2D2D] hover:border-zinc-700 transition-colors">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="text-[10px] font-mono text-[#9B9B9B]">
+                              Commit: {iter.commitSha?.slice(0, 7)}
+                            </span>
+                            <span className="text-[10px] text-[#9B9B9B]">
+                              {new Date(iter.createdAt).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="text-xs font-bold text-white flex items-center gap-1.5 justify-between">
+                            <span>Review Run Details</span>
+                            <Badge variant="outline" className={cn(
+                              "text-[9px] font-bold px-2 py-0.5",
+                              iter.status === "ready-for-approval" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                            )}>
+                              {iter.status === "ready-for-approval" ? "Ready for Approval" : "Fix Required"}
+                            </Badge>
+                          </div>
+                          <div className="text-[11px] text-zinc-400">
+                            Issues: {totalCount} total ({blockingCount} blocking)
+                          </div>
+                          <p className="text-xs text-[#E3E3E3] mt-2 leading-relaxed bg-zinc-950 p-2.5 rounded-lg border border-[#2D2D2D]/60 truncate">
+                            {iter.overallAssessment}
+                          </p>
+                          <div className="text-[10px] text-[#38BDF8] font-semibold pt-1 flex justify-end hover:underline">
+                            Click to view full review &rarr;
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -543,6 +623,139 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
           </Card>
         </div>
       </div>
+
+      {/* Dialog for historical review details */}
+      <Dialog open={selectedReview !== null} onOpenChange={(open) => { if (!open) setSelectedReview(null); }}>
+        <DialogContent className="bg-[#1C1C1C] border-[#2D2D2D] text-[#E3E3E3] max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-white flex items-center gap-2">
+              <History className="h-5 w-5 text-[#818CF8]" />
+              Review Run Details
+            </DialogTitle>
+            <DialogDescription className="text-xs text-[#9B9B9B] font-mono">
+              Commit: {selectedReview?.commitSha} &middot; Run: {selectedReview?.createdAt ? new Date(selectedReview.createdAt).toLocaleString() : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedReview && (
+            <div className="space-y-6 pt-4">
+              {/* Summary Row */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-[#222] p-4 rounded-xl border border-[#2D2D2D] flex flex-col justify-center">
+                  <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Overall Status</span>
+                  <div className={cn(
+                    "text-sm font-bold mt-1.5 flex items-center gap-1.5",
+                    selectedReview.status === "ready-for-approval" ? "text-emerald-400" : "text-rose-400"
+                  )}>
+                    {selectedReview.status === "ready-for-approval" ? (
+                      <>
+                        <CheckCircle2 className="h-4.5 w-4.5 text-emerald-400" />
+                        Ready for Approval
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="h-4.5 w-4.5 text-rose-400" />
+                        Fix Required
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-[#222] p-4 rounded-xl border border-[#2D2D2D] flex flex-col justify-center">
+                  <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Merge Readiness / Score</span>
+                  <div className="text-sm font-extrabold text-white mt-1 flex items-baseline gap-1">
+                    <span className="text-lg text-[#818CF8]">{selectedReview.score}%</span>
+                    <span className="text-[10px] text-zinc-500">({selectedReview.score}/100)</span>
+                  </div>
+                </div>
+
+                <div className="bg-[#222] p-4 rounded-xl border border-[#2D2D2D] flex flex-col justify-center">
+                  <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Issue Counts</span>
+                  <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                    <Badge variant="outline" className="text-[9px] bg-rose-500/10 text-rose-400 border-rose-500/20 px-1.5 py-0">
+                      {selectedReview.issues?.filter((i: any) => i.severity === "blocking").length} Blocking
+                    </Badge>
+                    <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/20 px-1.5 py-0">
+                      {selectedReview.issues?.filter((i: any) => i.severity !== "blocking").length} Suggestions
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Assessment Card */}
+              <div className="bg-[#222] p-4 rounded-xl border border-[#2D2D2D] space-y-1">
+                <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Overall Assessment</span>
+                <p className="text-xs text-[#E3E3E3] leading-relaxed whitespace-pre-wrap">
+                  {selectedReview.overallAssessment}
+                </p>
+              </div>
+
+              {/* Issues List */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-white border-b border-[#2D2D2D] pb-2">Findings ({selectedReview.issues?.length})</h4>
+                {selectedReview.issues?.length === 0 ? (
+                  <div className="text-center py-6 text-zinc-500 text-xs">
+                    No issues detected in this review.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {selectedReview.issues?.map((issue: any) => (
+                      <div key={issue.id} className={cn(
+                        "p-4 rounded-xl border space-y-3 text-xs",
+                        issue.severity === "blocking" ? "border-rose-500/20 bg-rose-500/5" : "border-zinc-700 bg-zinc-800/10"
+                      )}>
+                        <div className="flex justify-between items-start gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <Badge className={cn(
+                              "text-[8px] font-extrabold uppercase px-1.5 py-0",
+                              issue.severity === "blocking" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" :
+                              issue.severity === "high" ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
+                              issue.severity === "medium" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
+                              issue.severity === "low" ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" :
+                              "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                            )}>
+                              {issue.severity}
+                            </Badge>
+                            <span className="font-bold text-white text-xs">{issue.title}</span>
+                          </div>
+                          {issue.file && (
+                            <span className="text-[9px] font-mono text-zinc-400 bg-zinc-900/80 px-1.5 py-0.5 rounded break-all">
+                              {issue.file}{issue.line ? `:${issue.line}` : ""}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-2 text-xs">
+                          <div>
+                            <span className="text-[9px] uppercase font-mono text-zinc-500 block font-bold">Why It Matters</span>
+                            <p className="text-zinc-300 mt-0.5 leading-relaxed">{issue.whyItMatters}</p>
+                          </div>
+
+                          {issue.suggestedFix && (
+                            <div>
+                              <span className="text-[9px] uppercase font-mono text-zinc-500 block font-bold">Suggested Fix</span>
+                              <pre className="text-xs text-emerald-400 mt-0.5 leading-relaxed bg-zinc-950 p-2.5 rounded-lg border border-[#2D2D2D]/60 font-mono whitespace-pre-wrap">
+                                {issue.suggestedFix}
+                              </pre>
+                            </div>
+                          )}
+
+                          {issue.expectedResult && (
+                            <div>
+                              <span className="text-[9px] uppercase font-mono text-zinc-500 block font-bold">Expected Result</span>
+                              <p className="text-zinc-300 mt-0.5 leading-relaxed">{issue.expectedResult}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

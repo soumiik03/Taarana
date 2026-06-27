@@ -7,18 +7,28 @@ const openai = new OpenAI({
 });
 
 export type ReviewIssue = {
-    type: "blocking" | "non-blocking";
+    title: string;
+    severity: "blocking" | "high" | "medium" | "low" | "suggestion";
+    whyItMatters: string;
+    file: string | null;
     line: number | null;
-    comment: string;
+    suggestedFix: string;
+    expectedResult: string;
+};
+
+export type ReviewResult = {
+    overallAssessment: string;
+    issues: ReviewIssue[];
 };
 
 export async function generateReviewForChunk(
     prdContext: string[],
+    tasksContext: string,
     filename: string,
     codeDiff: string
-): Promise<ReviewIssue[]> {
-    // 1. Build the prompt with full PRD
-    const prompt = buildReviewPrompt(filename, codeDiff, prdContext);
+): Promise<ReviewResult> {
+    // 1. Build the prompt with full context
+    const prompt = buildReviewPrompt(filename, codeDiff, prdContext, tasksContext);
 
     // 2. Call the AI
     const response = await openai.chat.completions.create({
@@ -27,13 +37,21 @@ export async function generateReviewForChunk(
         temperature: 0.1,
     });
 
-    const raw = response.choices[0]?.message?.content ?? "[]";
+    const raw = response.choices[0]?.message?.content ?? "{}";
 
     try {
         const cleaned = raw.replace(/```json|```/g, "").trim();
-        return JSON.parse(cleaned) as ReviewIssue[];
+        const parsed = JSON.parse(cleaned);
+        
+        return {
+            overallAssessment: parsed.overallAssessment || "No overall assessment provided.",
+            issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+        } as ReviewResult;
     } catch {
         console.error("[Review] Failed to parse AI response:", raw);
-        return [];
+        return {
+            overallAssessment: "Failed to parse overall assessment.",
+            issues: [],
+        };
     }
 }

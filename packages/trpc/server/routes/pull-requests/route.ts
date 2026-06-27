@@ -9,6 +9,8 @@ import {
   organizationsTable,
   workspaceMembersTable,
   projectsTable,
+  reviewsTable,
+  reviewIssuesTable,
 } from "@repo/database/schema";
 import { TRPCError } from "@trpc/server";
 
@@ -182,7 +184,7 @@ export const pullRequestsRouter = router({
 
   getReviewHistory: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .query(async ({ input, ctx }) => {
+    .query(async ({ input }) => {
       const [pr] = await db
         .select()
         .from(pullRequestsTable)
@@ -197,116 +199,36 @@ export const pullRequestsRouter = router({
       }
 
       try {
-        const { octokit } = await getInstallationOctokit(ctx.user.id);
+        const reviews = await db
+          .select()
+          .from(reviewsTable)
+          .where(eq(reviewsTable.pullRequestId, input.id))
+          .orderBy(desc(reviewsTable.createdAt));
 
-        // Fetch commits on the PR
-        const commitsResponse = await octokit.request("GET /repos/{owner}/{repo}/pulls/{pull_number}/commits", {
-          owner: pr.repoOwner,
-          repo: pr.repoName,
-          pull_number: pr.prNumber,
-          per_page: 50,
-        });
-
-        // Fetch inline comments on the PR
-        const commentsResponse = await octokit.request("GET /repos/{owner}/{repo}/pulls/{pull_number}/comments", {
-          owner: pr.repoOwner,
-          repo: pr.repoName,
-          pull_number: pr.prNumber,
-          per_page: 100,
-        });
-
-        const inlineComments = commentsResponse.data;
-
-        // Group issues by commit SHA or date
-        const iterations = commitsResponse.data.map((c: any) => {
-          const sha = c.sha;
-          const commitComments = inlineComments.filter((comment: any) => comment.commit_id === sha);
-          
-          // Filter for comments posted by our AI bot
-          const appComments = commitComments.filter((comment: any) => {
-            const body = comment.body || "";
-            return body.includes("🚨 **Blocking**") || body.includes("⚠️ **Non-blocking**");
-          });
-
-          const blockingIssues = appComments.filter((comment: any) => comment.body.includes("🚨 **Blocking**"));
-          const nonBlockingIssues = appComments.filter((comment: any) => comment.body.includes("⚠️ **Non-blocking**"));
-
-          const blockingCount = blockingIssues.length;
-          const nonBlockingCount = nonBlockingIssues.length;
-
-          let status = "passed";
-          if (blockingCount > 0) {
-             status = "fix-needed";
-          }
-
-          let summary = `AI QA reviewed commit ${sha.slice(0, 7)}: no blocking issues found.`;
-          if (blockingCount > 0) {
-            summary = `AI QA reviewed commit ${sha.slice(0, 7)}: found ${blockingCount} blocking and ${nonBlockingCount} non-blocking issues.`;
-          } else if (nonBlockingCount > 0) {
-            summary = `AI QA reviewed commit ${sha.slice(0, 7)}: passed with ${nonBlockingCount} suggestions.`;
-          }
-
-          return {
-            sha,
-            timestamp: c.commit.committer?.date || c.commit.author?.date || new Date().toISOString(),
-            author: c.commit.author?.name || "Developer",
-            message: c.commit.message,
-            blockingCount,
-            nonBlockingCount,
-            status,
-            summary,
-            issues: appComments.map((comment: any) => {
-              const body = comment.body || "";
-              const isBlocking = body.includes("🚨 **Blocking**");
-              const cleanBody = body
-                .replace("🚨 **Blocking**\n\n", "")
-                .replace("⚠️ **Non-blocking**\n\n", "")
-                .replace("🚨 **Blocking**\r\n\r\n", "")
-                .replace("⚠️ **Non-blocking**\r\n\r\n", "");
-              
-              return {
-                id: comment.id,
-                filename: comment.path,
-                line: comment.line || comment.original_line || null,
-                comment: cleanBody,
-                type: isBlocking ? "blocking" : "non-blocking",
-                htmlUrl: comment.html_url,
-              };
-            }),
-          };
-        });
+        const reviewsWithIssues = await Promise.all(
+          reviews.map(async (review) => {
+            const issues = await db
+              .select()
+              .from(reviewIssuesTable)
+              .where(eq(reviewIssuesTable.reviewId, review.id))
+              .orderBy(desc(reviewIssuesTable.createdAt));
+            return {
+              ...review,
+              issues,
+            };
+          })
+        );
 
         return {
-          iterations: iterations.reverse(),
-          allIssues: inlineComments
-            .filter((c: any) => {
-              const body = c.body || "";
-              return body.includes("🚨 **Blocking**") || body.includes("⚠️ **Non-blocking**");
-            })
-            .map((comment: any) => {
-              const body = comment.body || "";
-              const isBlocking = body.includes("🚨 **Blocking**");
-              const cleanBody = body
-                .replace("🚨 **Blocking**\n\n", "")
-                .replace("⚠️ **Non-blocking**\n\n", "");
-              return {
-                id: comment.id,
-                filename: comment.path,
-                line: comment.line || comment.original_line || null,
-                comment: cleanBody,
-                type: isBlocking ? "blocking" : "non-blocking",
-                htmlUrl: comment.html_url,
-                commitSha: comment.commit_id,
-                createdAt: comment.created_at,
-              };
-            }),
+          latest: reviewsWithIssues[0] || null,
+          history: reviewsWithIssues,
         };
       } catch (err: any) {
-        console.error("Failed to fetch review comments from GitHub:", err);
+        console.error("Failed to fetch review history from database:", err);
         return {
-          iterations: [],
-          allIssues: [],
-          error: err.message || "Failed to fetch from GitHub",
+          latest: null,
+          history: [],
+          error: err.message || "Failed to fetch review history",
         };
       }
     }),

@@ -8,3 +8,5 @@ export * from "./models/clarification-question";
 export * from "./models/prd";
 export * from "./models/task";
 export * from "./models/pull-request";
+export * from "./models/review";
+
