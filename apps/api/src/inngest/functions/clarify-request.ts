@@ -17,6 +17,7 @@ export const clarifyFeatureRequest = inngest.createFunction(
   { id: "clarify-feature-request", triggers: [{ event: "feature-request/created" }] },
   async ({ event, step }) => {
     const { featureRequestId } = event.data;
+    console.log(`[Clarification Inngest] Started clarification workflow for Feature Request ID: ${featureRequestId}`);
 
     const featureRequest = await step.run(
       "fetch-feature-request",
@@ -30,8 +31,10 @@ export const clarifyFeatureRequest = inngest.createFunction(
     );
 
     if (!featureRequest) {
+      console.error(`[Clarification Inngest] Feature request with ID: ${featureRequestId} not found in database.`);
       return { error: "Feature request not found" };
     }
+    console.log(`[Clarification Inngest] Fetched request details: title="${featureRequest.title}", current status=${featureRequest.status}`);
 
     const aiResponse = await step.run("generate-clarification-questions", async () => {
       if (!process.env.OPENROUTER_API_KEY) {
@@ -55,11 +58,16 @@ Do NOT return anything else besides the JSON array.`;
         temperature: 0.2,
       });
 
+      console.log(`[Clarification Inngest] Raw AI Response for ID ${featureRequestId}: ${text}`);
       return asStringArray(parseJsonFromText<unknown>(text)).slice(0, 3);
     });
 
+    console.log(`[Clarification Inngest] AI clarification response for ID ${featureRequestId}:`, JSON.stringify(aiResponse));
+    console.log(`[Clarification Inngest] Number of clarification questions generated for ID ${featureRequestId}: ${aiResponse.length}`);
+
     if (aiResponse.length > 0) {
       await step.run("save-clarification-questions", async () => {
+        console.log(`[Clarification Inngest] Saving clarification questions to DB for FR ID: ${featureRequestId} and setting status to 'clarifying'`);
         const values = aiResponse.map((q: string) => ({
           featureRequestId,
           question: q,
@@ -71,15 +79,20 @@ Do NOT return anything else besides the JSON array.`;
           .update(featureRequestsTable)
           .set({ status: "clarifying" })
           .where(eq(featureRequestsTable.id, featureRequestId));
+        console.log(`[Clarification Inngest] Database status updated to 'clarifying' for FR ID: ${featureRequestId}`);
       });
+      console.log(`[Clarification Inngest] Final Feature Request status for ID ${featureRequestId}: clarifying`);
       return { status: "clarifying", questions: aiResponse.length };
     } else {
       await step.run("mark-request-ready", async () => {
+        console.log(`[Clarification Inngest] No clarification questions generated. Updating DB status to 'ready' for FR ID: ${featureRequestId}`);
         await db
           .update(featureRequestsTable)
           .set({ status: "ready" })
           .where(eq(featureRequestsTable.id, featureRequestId));
+        console.log(`[Clarification Inngest] Database status updated to 'ready' for FR ID: ${featureRequestId}`);
       });
+      console.log(`[Clarification Inngest] Final Feature Request status for ID ${featureRequestId}: ready`);
       return { status: "ready" };
     }
   }

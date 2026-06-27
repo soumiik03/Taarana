@@ -32,6 +32,7 @@ import { cn } from "~/lib/utils";
 export default function PullRequestDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const [selectedReview, setSelectedReview] = useState<any>(null);
 
   // Query pull request database context
   const { data: ctx, isLoading: isCtxLoading, error: ctxError } = trpc.pullRequest.getById.useQuery(
@@ -80,8 +81,6 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
 
   const { pr, featureRequest, prd, tasks } = ctx;
 
-  const [selectedReview, setSelectedReview] = useState<any>(null);
-
   // Visual stages for Workflow Timeline
   const isClarified = featureRequest && featureRequest.status !== "pending" && featureRequest.status !== "clarifying";
   const isPrdApproved = prd && prd.status === "approved";
@@ -108,6 +107,7 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
   const activeIssues = latestReview?.issues || [];
   const blockingIssues = activeIssues.filter(issue => issue.severity === "blocking");
   const nonBlockingIssues = activeIssues.filter(issue => issue.severity !== "blocking");
+  const isReviewInProgress = !latestReview || latestReview.commitSha !== pr.headSha;
 
   return (
     <div className="space-y-6 mx-auto max-w-6xl px-4 py-8">
@@ -154,7 +154,7 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Content (Left Col) */}
         <div className="lg:col-span-2 space-y-6">
-          
+
           {/* Workflow Timeline Card */}
           <Card className="bg-[#202020] border-[#2D2D2D]">
             <CardHeader className="pb-4">
@@ -171,8 +171,8 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
                       stage.completed
                         ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-400"
                         : stage.active
-                        ? "bg-amber-500/10 border-amber-500/40 text-amber-400 animate-pulse"
-                        : "bg-zinc-800 border-zinc-700 text-zinc-400"
+                          ? "bg-amber-500/10 border-amber-500/40 text-amber-400 animate-pulse"
+                          : "bg-zinc-800 border-zinc-700 text-zinc-400"
                     )}>
                       {stage.completed ? (
                         <CheckCircle2 className="h-4.5 w-4.5 text-emerald-400" />
@@ -197,160 +197,175 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
                 <CardTitle className="text-sm font-bold text-white">Current Review Issues</CardTitle>
                 <CardDescription className="text-xs text-[#9B9B9B]">Active comments and bugs detected by AI QA reviewer</CardDescription>
               </div>
-              <div className="flex gap-2">
-                <Badge variant="outline" className={cn(
-                  "text-[10px] font-bold px-2 py-0.5",
-                  blockingIssues.length > 0 ? "bg-rose-500/10 text-rose-400 border-rose-500/20" : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                )}>
-                  {blockingIssues.length} Blocking
-                </Badge>
-                <Badge variant="outline" className="text-[10px] font-bold bg-amber-500/10 text-amber-400 border-amber-500/20 px-2 py-0.5">
-                  {nonBlockingIssues.length} Suggestions
-                </Badge>
-              </div>
+              {!isReviewInProgress && latestReview && (
+                <div className="flex gap-2">
+                  <Badge variant="outline" className={cn(
+                    "text-[10px] font-bold px-2 py-0.5",
+                    blockingIssues.length > 0 ? "bg-rose-500/10 text-rose-400 border-rose-500/20" : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                  )}>
+                    {blockingIssues.length} Blocking
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] font-bold bg-amber-500/10 text-amber-400 border-amber-500/20 px-2 py-0.5">
+                    {nonBlockingIssues.length} Suggestions
+                  </Badge>
+                </div>
+              )}
             </CardHeader>
             <CardContent className="pt-4 space-y-6">
-              {/* AI Review Summary Block */}
-              {latestReview ? (
-                <div className="space-y-6">
-                  {/* Stats Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Status Card */}
-                    <div className="bg-[#252525] p-4 rounded-xl border border-[#2D2D2D] flex flex-col justify-center">
-                      <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Overall Status</span>
-                      <div className={cn(
-                        "text-sm font-bold mt-1.5 flex items-center gap-1.5",
-                        latestReview.status === "ready-for-approval" ? "text-emerald-400" : "text-rose-400"
-                      )}>
-                        {latestReview.status === "ready-for-approval" ? (
-                          <>
-                            <CheckCircle2 className="h-4.5 w-4.5 text-emerald-400" />
-                            Ready for Approval
-                          </>
-                        ) : (
-                          <>
-                            <AlertTriangle className="h-4.5 w-4.5 text-rose-400" />
-                            Fix Required
-                          </>
-                        )}
+              {isReviewInProgress ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
+                  <div className="h-8 w-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-white">Review in progress...</p>
+                    <p className="text-xs text-[#9B9B9B]">Analyzing commit {pr.headSha.slice(0, 7)} against requirements</p>
+                  </div>
+                </div>
+              ) : latestReview ? (
+                <>
+                  <div className="space-y-6">
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Status Card */}
+                      <div className="bg-[#252525] p-4 rounded-xl border border-[#2D2D2D] flex flex-col justify-center">
+                        <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Overall Status</span>
+                        <div className={cn(
+                          "text-sm font-bold mt-1.5 flex items-center gap-1.5",
+                          latestReview.status === "ready-for-approval" ? "text-emerald-400" : "text-rose-400"
+                        )}>
+                          {latestReview.status === "ready-for-approval" ? (
+                            <>
+                              <CheckCircle2 className="h-4.5 w-4.5 text-emerald-400" />
+                              Ready for Approval
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle className="h-4.5 w-4.5 text-rose-400" />
+                              Fix Required
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Score Card */}
+                      <div className="bg-[#252525] p-4 rounded-xl border border-[#2D2D2D] flex flex-col justify-center">
+                        <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Merge Readiness</span>
+                        <div className="flex items-baseline gap-1.5 mt-1.5">
+                          <span className="text-lg font-extrabold text-[#818CF8]">{latestReview.score}%</span>
+                          <span className="text-[10px] text-zinc-500">({latestReview.score}/100)</span>
+                        </div>
+                        <div className="w-full bg-zinc-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all duration-500",
+                              latestReview.score >= 80 ? "bg-emerald-500" :
+                                latestReview.score >= 50 ? "bg-amber-500" : "bg-rose-500"
+                            )}
+                            style={{ width: `${latestReview.score}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Breakdown Card */}
+                      <div className="bg-[#252525] p-4 rounded-xl border border-[#2D2D2D] flex flex-col justify-center">
+                        <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Issue Breakdown</span>
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          <Badge variant="outline" className="text-[9px] bg-rose-500/10 text-rose-400 border-rose-500/20 px-1.5 py-0.5">
+                            {blockingIssues.length} Blocking
+                          </Badge>
+                          <Badge variant="outline" className="text-[9px] bg-orange-500/10 text-orange-400 border-orange-500/20 px-1.5 py-0.5">
+                            {activeIssues.filter(i => i.severity === "high").length} High
+                          </Badge>
+                          <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/20 px-1.5 py-0.5">
+                            {activeIssues.filter(i => i.severity === "medium").length} Med
+                          </Badge>
+                          <Badge variant="outline" className="text-[9px] bg-yellow-500/10 text-yellow-400 border-yellow-500/20 px-1.5 py-0.5">
+                            {activeIssues.filter(i => i.severity === "low").length} Low
+                          </Badge>
+                          <Badge variant="outline" className="text-[9px] bg-blue-500/10 text-blue-400 border-blue-500/20 px-1.5 py-0.5">
+                            {activeIssues.filter(i => i.severity === "suggestion").length} Sug
+                          </Badge>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Score Card */}
-                    <div className="bg-[#252525] p-4 rounded-xl border border-[#2D2D2D] flex flex-col justify-center">
-                      <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Merge Readiness</span>
-                      <div className="flex items-baseline gap-1.5 mt-1.5">
-                        <span className="text-lg font-extrabold text-[#818CF8]">{latestReview.score}%</span>
-                        <span className="text-[10px] text-zinc-500">({latestReview.score}/100)</span>
-                      </div>
-                      <div className="w-full bg-zinc-800 h-1.5 rounded-full mt-2 overflow-hidden">
-                        <div 
-                          className={cn(
-                            "h-full rounded-full transition-all duration-500",
-                            latestReview.score >= 80 ? "bg-emerald-500" :
-                            latestReview.score >= 50 ? "bg-amber-500" : "bg-rose-500"
-                          )} 
-                          style={{ width: `${latestReview.score}%` }} 
-                        />
-                      </div>
-                    </div>
-
-                    {/* Breakdown Card */}
-                    <div className="bg-[#252525] p-4 rounded-xl border border-[#2D2D2D] flex flex-col justify-center">
-                      <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Issue Breakdown</span>
-                      <div className="flex flex-wrap gap-1 mt-1.5">
-                        <Badge variant="outline" className="text-[9px] bg-rose-500/10 text-rose-400 border-rose-500/20 px-1.5 py-0.5">
-                          {blockingIssues.length} Blocking
-                        </Badge>
-                        <Badge variant="outline" className="text-[9px] bg-orange-500/10 text-orange-400 border-orange-500/20 px-1.5 py-0.5">
-                          {activeIssues.filter(i => i.severity === "high").length} High
-                        </Badge>
-                        <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/20 px-1.5 py-0.5">
-                          {activeIssues.filter(i => i.severity === "medium").length} Med
-                        </Badge>
-                        <Badge variant="outline" className="text-[9px] bg-yellow-500/10 text-yellow-400 border-yellow-500/20 px-1.5 py-0.5">
-                          {activeIssues.filter(i => i.severity === "low").length} Low
-                        </Badge>
-                        <Badge variant="outline" className="text-[9px] bg-blue-500/10 text-blue-400 border-blue-500/20 px-1.5 py-0.5">
-                          {activeIssues.filter(i => i.severity === "suggestion").length} Sug
-                        </Badge>
-                      </div>
+                    {/* Assessment Card */}
+                    <div className="bg-[#252525] p-4 rounded-xl border border-[#2D2D2D] space-y-1">
+                      <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Overall Assessment</span>
+                      <p className="text-xs text-[#E3E3E3] leading-relaxed whitespace-pre-wrap">
+                        {latestReview.overallAssessment}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Assessment Card */}
-                  <div className="bg-[#252525] p-4 rounded-xl border border-[#2D2D2D] space-y-1">
-                    <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider">Overall Assessment</span>
-                    <p className="text-xs text-[#E3E3E3] leading-relaxed whitespace-pre-wrap">
-                      {latestReview.overallAssessment}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
+                  {activeIssues.length === 0 ? (
+                    <div className="text-center py-12 border border-dashed border-[#2D2D2D] rounded-xl text-zinc-400 text-sm">
+                      {isHistoryLoading ? "Checking comments..." : "🎉 No issues found on this PR. Clean codebase!"}
+                    </div>
+                  ) : (
+                    <div className="space-y-4 border-t border-[#2D2D2D] pt-4">
+                      <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Review Findings</h4>
+                      <div className="space-y-4">
+                        {activeIssues.map((issue) => (
+                          <div key={issue.id} className={cn(
+                            "p-4 rounded-xl border space-y-3.5 text-xs transition-colors",
+                            issue.severity === "blocking" ? "border-rose-500/20 bg-rose-500/5 hover:border-rose-500/30" :
+                              issue.severity === "high" ? "border-orange-500/20 bg-orange-500/5 hover:border-orange-500/30" :
+                                issue.severity === "medium" ? "border-amber-500/20 bg-amber-500/5 hover:border-amber-500/30" :
+                                  issue.severity === "low" ? "border-yellow-500/20 bg-yellow-500/5 hover:border-yellow-500/30" :
+                                    "border-zinc-700 bg-zinc-800/10 hover:border-zinc-600"
+                          )}>
+                            <div className="flex justify-between items-start gap-2 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                <Badge className={cn(
+                                  "text-[8px] font-extrabold uppercase px-1.5 py-0.5",
+                                  issue.severity === "blocking" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" :
+                                    issue.severity === "high" ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
+                                      issue.severity === "medium" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
+                                        issue.severity === "low" ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" :
+                                          "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                )}>
+                                  {issue.severity}
+                                </Badge>
+                                <span className="font-bold text-white text-xs">{issue.title}</span>
+                              </div>
+                              {issue.file && (
+                                <span className="text-[9px] font-mono text-zinc-400 bg-zinc-900/80 px-1.5 py-0.5 rounded break-all">
+                                  {issue.file}{issue.line ? `:${issue.line}` : ""}
+                                </span>
+                              )}
+                            </div>
 
-              {activeIssues.length === 0 ? (
-                <div className="text-center py-12 border border-dashed border-[#2D2D2D] rounded-xl text-zinc-400 text-sm">
-                  {isHistoryLoading ? "Checking comments..." : "🎉 No issues found on this PR. Clean codebase!"}
-                </div>
+                            <div className="space-y-2.5 text-xs">
+                              <div>
+                                <span className="text-[9px] uppercase font-mono text-zinc-500 block font-bold">Why It Matters</span>
+                                <p className="text-zinc-300 mt-0.5 leading-relaxed">{issue.whyItMatters}</p>
+                              </div>
+
+                              {issue.suggestedFix && (
+                                <div>
+                                  <span className="text-[9px] uppercase font-mono text-zinc-500 block font-bold">Suggested Fix</span>
+                                  <pre className="text-xs text-emerald-400 mt-0.5 leading-relaxed bg-zinc-950 p-2.5 rounded-lg border border-[#2D2D2D]/60 font-mono whitespace-pre-wrap">
+                                    {issue.suggestedFix}
+                                  </pre>
+                                </div>
+                              )}
+
+                              {issue.expectedResult && (
+                                <div>
+                                  <span className="text-[9px] uppercase font-mono text-zinc-500 block font-bold">Expected Result</span>
+                                  <p className="text-zinc-300 mt-0.5 leading-relaxed">{issue.expectedResult}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
-                <div className="space-y-4 border-t border-[#2D2D2D] pt-4">
-                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Review Findings</h4>
-                  <div className="space-y-4">
-                    {activeIssues.map((issue) => (
-                      <div key={issue.id} className={cn(
-                        "p-4 rounded-xl border space-y-3.5 text-xs transition-colors",
-                        issue.severity === "blocking" ? "border-rose-500/20 bg-rose-500/5 hover:border-rose-500/30" :
-                        issue.severity === "high" ? "border-orange-500/20 bg-orange-500/5 hover:border-orange-500/30" :
-                        issue.severity === "medium" ? "border-amber-500/20 bg-amber-500/5 hover:border-amber-500/30" :
-                        issue.severity === "low" ? "border-yellow-500/20 bg-yellow-500/5 hover:border-yellow-500/30" :
-                        "border-zinc-700 bg-zinc-800/10 hover:border-zinc-600"
-                      )}>
-                        <div className="flex justify-between items-start gap-2 flex-wrap">
-                          <div className="flex items-center gap-2">
-                            <Badge className={cn(
-                              "text-[8px] font-extrabold uppercase px-1.5 py-0.5",
-                              issue.severity === "blocking" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" :
-                              issue.severity === "high" ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
-                              issue.severity === "medium" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
-                              issue.severity === "low" ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" :
-                              "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                            )}>
-                              {issue.severity}
-                            </Badge>
-                            <span className="font-bold text-white text-xs">{issue.title}</span>
-                          </div>
-                          {issue.file && (
-                            <span className="text-[9px] font-mono text-zinc-400 bg-zinc-900/80 px-1.5 py-0.5 rounded break-all">
-                              {issue.file}{issue.line ? `:${issue.line}` : ""}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="space-y-2.5 text-xs">
-                          <div>
-                            <span className="text-[9px] uppercase font-mono text-zinc-500 block font-bold">Why It Matters</span>
-                            <p className="text-zinc-300 mt-0.5 leading-relaxed">{issue.whyItMatters}</p>
-                          </div>
-
-                          {issue.suggestedFix && (
-                            <div>
-                              <span className="text-[9px] uppercase font-mono text-zinc-500 block font-bold">Suggested Fix</span>
-                              <pre className="text-xs text-emerald-400 mt-0.5 leading-relaxed bg-zinc-950 p-2.5 rounded-lg border border-[#2D2D2D]/60 font-mono whitespace-pre-wrap">
-                                {issue.suggestedFix}
-                              </pre>
-                            </div>
-                          )}
-
-                          {issue.expectedResult && (
-                            <div>
-                              <span className="text-[9px] uppercase font-mono text-zinc-500 block font-bold">Expected Result</span>
-                              <p className="text-zinc-300 mt-0.5 leading-relaxed">{issue.expectedResult}</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                <div className="text-center py-12 border border-dashed border-[#2D2D2D] rounded-xl text-zinc-400 text-sm">
+                  {isHistoryLoading ? "Checking comments..." : "🎉 No reviews recorded yet for this PR."}
                 </div>
               )}
             </CardContent>
@@ -427,8 +442,8 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
                           <Badge variant="outline" className={cn(
                             "text-[9px] uppercase font-bold",
                             task.status === "done" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
-                            task.status === "in_progress" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
-                            "bg-zinc-800 text-zinc-400"
+                              task.status === "in_progress" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
+                                "bg-zinc-800 text-zinc-400"
                           )}>
                             {task.status.replace("_", " ")}
                           </Badge>
@@ -526,7 +541,7 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
 
         {/* Sidebar (Right Col) */}
         <div className="space-y-6">
-          
+
           {/* Linked Feature Request Card */}
           <Card className="bg-[#202020] border-[#2D2D2D] text-[#E3E3E3] shadow-md">
             <CardHeader className="pb-3 border-b border-[#2D2D2D]/60 flex flex-row items-center gap-2.5">
@@ -550,9 +565,9 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
                     <Badge variant="outline" className={cn(
                       "text-[9px] uppercase font-bold mt-1 px-2 py-0.5",
                       featureRequest.status === "ready-for-approval" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
-                      featureRequest.status === "fix-needed" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" :
-                      featureRequest.status === "clarifying" ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" :
-                      "bg-zinc-800 text-zinc-400"
+                        featureRequest.status === "fix-needed" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" :
+                          featureRequest.status === "clarifying" ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" :
+                            "bg-zinc-800 text-zinc-400"
                     )}>
                       {featureRequest.status.replace("-", " ")}
                     </Badge>
@@ -709,10 +724,10 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
                             <Badge className={cn(
                               "text-[8px] font-extrabold uppercase px-1.5 py-0",
                               issue.severity === "blocking" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" :
-                              issue.severity === "high" ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
-                              issue.severity === "medium" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
-                              issue.severity === "low" ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" :
-                              "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                issue.severity === "high" ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
+                                  issue.severity === "medium" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
+                                    issue.severity === "low" ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" :
+                                      "bg-blue-500/10 text-blue-400 border-blue-500/20"
                             )}>
                               {issue.severity}
                             </Badge>

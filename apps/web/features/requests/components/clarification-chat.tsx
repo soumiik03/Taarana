@@ -23,18 +23,23 @@ export function ClarificationChat({ featureRequestId }: { featureRequestId: stri
     }
   );
 
-  const allAnswered = Boolean(
-    questions?.length && questions.every((question) => question.status === "answered")
-  );
-
   const { data: request } = trpc.featureRequests.getById.useQuery(
     { id: featureRequestId },
     {
-      enabled: allAnswered,
       refetchInterval: (query) =>
         query.state.data?.status === "ready" ? false : 3000,
     }
   );
+
+  const allAnswered = Boolean(
+    request?.status === "ready" ||
+    (questions?.length && questions.every((question) => question.status === "answered"))
+  );
+
+  console.log(`[Clarification Frontend] Render - featureRequestId: ${featureRequestId}`);
+  console.log(`[Clarification Frontend] questions query result count: ${questions?.length ?? 0}`);
+  console.log(`[Clarification Frontend] request query result status: ${request?.status ?? "N/A"}`);
+  console.log(`[Clarification Frontend] allAnswered calculated state: ${allAnswered}`);
 
   const triggerPrd = trpc.prd.trigger.useMutation({
     onSuccess: (prd) => {
@@ -67,6 +72,14 @@ export function ClarificationChat({ featureRequestId }: { featureRequestId: stri
   }
 
   if (!questions || questions.length === 0) {
+    if (request?.status === "ready") {
+      return (
+        <div className="text-sm text-zinc-500 italic flex items-center gap-2">
+          <div className="h-4 w-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+          No clarifications needed. Starting PRD generation...
+        </div>
+      );
+    }
     return (
       <div className="text-sm text-zinc-500 italic">
         No clarification questions generated yet. We are analyzing the request...

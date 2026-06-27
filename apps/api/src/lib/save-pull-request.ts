@@ -33,13 +33,13 @@ export async function savePullRequestAndLinkFeature(payload: any) {
     console.log(`Finished querying open features, found ${openFeatures.length}`);
 
     for (const feature of openFeatures) {
-      const matchBranch = pr.head.ref.toLowerCase().includes(feature.id.toLowerCase()) || 
-                          pr.head.ref.toLowerCase().includes(feature.title.toLowerCase().replace(/\s+/g, '-'));
+      const matchBranch = pr.head.ref.toLowerCase().includes(feature.id.toLowerCase()) ||
+        pr.head.ref.toLowerCase().includes(feature.title.toLowerCase().replace(/\s+/g, '-'));
       const body = pr.body?.toLowerCase() ?? "";
-      const matchBody = body.includes(feature.id.toLowerCase()) || 
-                        body.includes(feature.title.toLowerCase());
+      const matchBody = body.includes(feature.id.toLowerCase()) ||
+        body.includes(feature.title.toLowerCase());
       const matchTitle = pr.title.toLowerCase().includes(feature.id.toLowerCase()) ||
-                         pr.title.toLowerCase().includes(feature.title.toLowerCase());
+        pr.title.toLowerCase().includes(feature.title.toLowerCase());
 
       if (matchBranch || matchBody || matchTitle) {
         featureRequestId = feature.id;
@@ -105,10 +105,11 @@ export async function savePullRequestAndLinkFeature(payload: any) {
 
   const installationId = payload.installation?.id;
 
-  console.log("Entering triggerReview");
+  console.log(`[Webhook] Webhook received for PR #${prNumber} on repo ${repoOwner}/${repoName}. Head commit SHA: ${headSha}`);
+  console.log(`[Webhook] Triggering review for PR ID: ${pr.id}, Feature Request ID: ${featureRequestId}, Installation ID: ${installationId}, Commit SHA: ${headSha}`);
   // Trigger the background review process
-  await triggerReview(pr.id, featureRequestId, installationId);
-  console.log("Finished triggerReview");
+  await triggerReview(pr.id, featureRequestId, installationId, headSha);
+  console.log("[Webhook] Finished triggering review");
 
   return { success: true };
 }

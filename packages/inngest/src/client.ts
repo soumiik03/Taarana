@@ -6,6 +6,7 @@ export const prReceivedEvent = eventType("github/pr.received", {
       prId: number;
       featureRequestId: string | null;
       installationId?: number;
+      commitSha?: string;
     };
   }>(),
 });

@@ -18,38 +18,55 @@ import { postReviewComments } from "../utils/pr-comment";
 export const reviewPRFunction = inngest.createFunction(
   { id: "review-pr", name: "AI QA Review PR", triggers: [{ event: "github/pr.received" }] },
   async ({ event, step }) => {
-    const { prId, featureRequestId, installationId } = event.data as {
+    const { prId, featureRequestId, installationId, commitSha: eventCommitSha } = event.data as {
       prId: number;
       featureRequestId: string | null;
       installationId?: number;
+      commitSha?: string;
     };
 
+    // Pre-resolve commitSha if not provided in event payload
+    let commitSha = eventCommitSha;
+    if (!commitSha) {
+      const [prRecord] = await db.select().from(pullRequestsTable).where(eq(pullRequestsTable.githubId, prId));
+      commitSha = prRecord?.headSha;
+    }
+    if (!commitSha) {
+      throw new Error("Unable to resolve commit SHA");
+    }
+
+    console.log(`[Review Run] Started review pipeline for PR ID: ${prId}, Commit: ${commitSha}`);
+
     // Step 1: Fetch everything we need from DB
-    const { pr, featureRequest, prd, org, tasks } = await step.run("fetch-context", async () => {
-      const [pr] = await db.select().from(pullRequestsTable).where(eq(pullRequestsTable.githubId, prId));
-      
-      if (!pr) {
-        throw new Error("Missing PR context");
-      }
+    const { pr, featureRequest, prd, org, tasks } = await step.run(
+      `fetch-context-${commitSha}`,
+      async () => {
+        const [pr] = await db.select().from(pullRequestsTable).where(eq(pullRequestsTable.githubId, prId));
+        
+        if (!pr) {
+          throw new Error("Missing PR context");
+        }
 
-      let featureRequest = null;
-      let prd = null;
-      let org = null;
-      let tasks: any[] = [];
+        let featureRequest = null;
+        let prd = null;
+        let org = null;
+        let tasks: any[] = [];
 
-      if (featureRequestId) {
-        [featureRequest] = await db.select().from(featureRequestsTable).where(eq(featureRequestsTable.id, featureRequestId));
-        if (featureRequest) {
-          [prd] = await db.select().from(prdsTable).where(eq(prdsTable.featureRequestId, featureRequestId));
-          [org] = await db.select().from(organizationsTable).where(eq(organizationsTable.id, featureRequest.organizationId!));
-          if (prd) {
-            tasks = await db.select().from(tasksTable).where(eq(tasksTable.prdId, prd.id));
+        if (featureRequestId) {
+          [featureRequest] = await db.select().from(featureRequestsTable).where(eq(featureRequestsTable.id, featureRequestId));
+          if (featureRequest) {
+            [prd] = await db.select().from(prdsTable).where(eq(prdsTable.featureRequestId, featureRequestId));
+            [org] = await db.select().from(organizationsTable).where(eq(organizationsTable.id, featureRequest.organizationId!));
+            if (prd) {
+              tasks = await db.select().from(tasksTable).where(eq(tasksTable.prdId, prd.id));
+            }
           }
         }
-      }
 
-      return { pr, featureRequest, prd, org, tasks };
-    });
+        return { pr, featureRequest, prd, org, tasks };
+      }
+    );
+    console.log(`[Review Run] Context fetched for PR #${pr.prNumber} (${pr.repoOwner}/${pr.repoName})`);
 
     const githubInstallationId = org?.githubInstallationId || installationId;
     if (!githubInstallationId) {
@@ -57,7 +74,7 @@ export const reviewPRFunction = inngest.createFunction(
     }
 
     // Step 2: Fetch the diff from GitHub
-    const files = await step.run("fetch-diff", async () => {
+    const files = await step.run(`fetch-diff-${commitSha}`, async () => {
       return getPRDiff(
         githubInstallationId,
         pr.repoOwner,
@@ -65,6 +82,7 @@ export const reviewPRFunction = inngest.createFunction(
         pr.prNumber
       );
     });
+    console.log(`[Review Run] Diff fetched. Found ${files.length} changed files.`);
 
     // Step 3: Chunk the diff
     const chunks = chunkDiff(files);
@@ -91,8 +109,8 @@ export const reviewPRFunction = inngest.createFunction(
       : "No engineering tasks found.";
 
     for (const chunk of chunks) {
-      const result = await step.run(`review-chunk-${chunk.filename}`, async () => {
-        return generateReviewForChunk(prdContext, tasksListStr, chunk.filename, chunk.chunk);
+      const result = await step.run(`review-chunk-${commitSha}-${chunk.filename}`, async () => {
+        return generateReviewForChunk(prdContext, tasksListStr, chunk.filename, chunk.chunk, commitSha);
       });
 
       if (result) {
@@ -139,6 +157,7 @@ export const reviewPRFunction = inngest.createFunction(
       else if (sev === "suggestion") score -= 1;
     }
     score = Math.max(0, Math.min(100, score));
+    console.log(`[Review Run] Review score calculated: ${score}/100. Issues count: ${deduplicatedIssues.length}`);
 
     const hasBlocking = deduplicatedIssues.some((i) => i.severity.toLowerCase() === "blocking");
     const overallStatus = hasBlocking ? "fix-needed" : "ready-for-approval";
@@ -152,13 +171,14 @@ export const reviewPRFunction = inngest.createFunction(
       }
     }
 
-    // Step 7: Save Review and Issues to database
-    await step.run("save-review-db", async () => {
+    // Step 7: Save Review to database
+    const newReview = await step.run(`save-review-${commitSha}`, async () => {
+      console.log(`[Review Run] Saving review to database for commit: ${commitSha}...`);
       const [newReview] = await db
         .insert(reviewsTable)
         .values({
           pullRequestId: pr.id,
-          commitSha: pr.headSha,
+          commitSha: commitSha,
           overallAssessment: mergedAssessment,
           score,
           status: overallStatus,
@@ -168,8 +188,14 @@ export const reviewPRFunction = inngest.createFunction(
       if (!newReview) {
         throw new Error("Failed to insert review into database");
       }
+      console.log(`[Review Run] Review saved successfully with database ID: ${newReview.id}`);
+      return newReview;
+    });
 
-      if (deduplicatedIssues.length > 0) {
+    // Step 8: Save Review Issues to database
+    if (deduplicatedIssues.length > 0) {
+      await step.run(`save-review-issues-${commitSha}`, async () => {
+        console.log(`[Review Run] Inserting ${deduplicatedIssues.length} review issues for Review ID: ${newReview.id}...`);
         await db.insert(reviewIssuesTable).values(
           deduplicatedIssues.map((issue) => ({
             reviewId: newReview.id,
@@ -182,19 +208,21 @@ export const reviewPRFunction = inngest.createFunction(
             expectedResult: issue.expectedResult,
           }))
         );
-      }
+        console.log("[Review Run] Review issues inserted successfully into database.");
+      });
+    }
 
-      return newReview;
-    });
-
-    // Step 8: Post comments to GitHub
-    await step.run("post-comments", async () => {
+    // Step 9: Post comments to GitHub
+    await step.run(`github-review-${commitSha}`, async () => {
+      console.log(`[Review Run] Creating a new GitHub review for commit: ${commitSha}...`);
       await postReviewComments(
         githubInstallationId,
         pr.repoOwner,
         pr.repoName,
         pr.prNumber,
-        pr.headSha,
+        commitSha,
+        mergedAssessment,
+        hasBlocking,
         deduplicatedIssues.map((issue) => ({
           filename: issue.filename || "",
           line: issue.line,
@@ -212,11 +240,13 @@ ${issue.expectedResult}`,
           type: issue.severity.toLowerCase() === "blocking" ? "blocking" : "non-blocking",
         }))
       );
+      console.log(`[Review Run] GitHub review created successfully for commit: ${commitSha}`);
     });
 
-    // Step 9: Update feature request status based on current run results only
+    // Step 10: Update feature request status based on current run results only
     if (featureRequestId) {
-      await step.run("update-status", async () => {
+      await step.run(`update-status-${commitSha}`, async () => {
+        console.log(`[Review Run] Updating feature request status to ${overallStatus} for ID: ${featureRequestId}...`);
         await db
           .update(featureRequestsTable)
           .set({
@@ -224,6 +254,7 @@ ${issue.expectedResult}`,
             updatedAt: new Date(),
           })
           .where(eq(featureRequestsTable.id, featureRequestId));
+        console.log(`[Review Run] Dashboard data and feature request status updated for ID: ${featureRequestId}`);
       });
     }
 
