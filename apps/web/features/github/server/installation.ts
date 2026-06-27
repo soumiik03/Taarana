@@ -1,5 +1,6 @@
 import { db, eq } from "@repo/database";
 import { organizationsTable, workspaceMembersTable, sessionTable, usersTable } from "@repo/database/schema";
+import { FREE_REPOSITORY_LIMIT } from "@repo/trpc/server/utils/limits";
 
 /**
  * Saves the GitHub App installation ID against the user's organization.
@@ -57,6 +58,47 @@ export async function saveInstallationId(
       }
     } else {
       organizationId = membership[0].organizationId;
+    }
+
+    // Fetch organization plan
+    const orgResult = await db
+      .select({ plan: organizationsTable.plan })
+      .from(organizationsTable)
+      .where(eq(organizationsTable.id, organizationId))
+      .limit(1);
+
+    const organizationRecord = orgResult[0];
+
+    // Enforce repository limits for FREE plan
+    if (organizationRecord && organizationRecord.plan === "FREE") {
+      const appId = process.env.GITHUB_APP_ID;
+      const privateKey = process.env.GITHUB_APP_PRIVATE_KEY;
+      const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+      const clientId = process.env.GITHUB_CLIENT_ID;
+
+      if (!appId || !privateKey) {
+        throw new Error("GitHub App configuration is missing on the server");
+      }
+
+      const { App } = await import("@octokit/app");
+      const app = new App({
+        appId,
+        privateKey: privateKey.replace(/\\n/g, "\n"),
+        oauth: {
+          clientId: clientId || "",
+          clientSecret: clientSecret || "",
+        },
+      });
+
+      const octokit = await app.getInstallationOctokit(installationId);
+      const response = await octokit.request("GET /installation/repositories", {
+        per_page: 100,
+      });
+
+      const reposCount = response.data.repositories.length;
+      if (reposCount > FREE_REPOSITORY_LIMIT) {
+        return { success: false, error: "Free plan supports only one connected repository." };
+      }
     }
 
     // Update the organization with the GitHub installation ID

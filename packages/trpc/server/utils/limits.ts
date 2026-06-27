@@ -1,0 +1,2 @@
+export const FREE_FEATURE_REQUEST_LIMIT = 5;
+export const FREE_REPOSITORY_LIMIT = 1;

@@ -12,6 +12,7 @@ const envSchema = z.object({
   OPENROUTER_API_KEY: z.string(),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
 });
 
 function createEnv(env: NodeJS.ProcessEnv) {

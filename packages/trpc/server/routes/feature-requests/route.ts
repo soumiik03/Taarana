@@ -1,11 +1,14 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../../trpc";
-import { db, eq, asc } from "@repo/database";
+import { db, eq, asc, and, gte, sql } from "@repo/database";
 import {
   featureRequestsTable,
   clarificationQuestionsTable,
+  organizationsTable,
 } from "@repo/database/schema";
 import { inngest } from "@repo/inngest";
+import { TRPCError } from "@trpc/server";
+import { FREE_FEATURE_REQUEST_LIMIT } from "../../utils/limits";
 
 export const featureRequestsRouter = router({
   create: publicProcedure
@@ -18,6 +21,47 @@ export const featureRequestsRouter = router({
       })
     )
     .mutation(async ({ input }) => {
+      // 1. Fetch organization details to check plan status
+      const org = await db
+        .select({ plan: organizationsTable.plan })
+        .from(organizationsTable)
+        .where(eq(organizationsTable.id, input.organizationId))
+        .limit(1)
+        .then((res) => res[0]);
+
+      if (!org) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Organization not found",
+        });
+      }
+
+      // 2. Enforce limits for FREE plan
+      if (org.plan === "FREE") {
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+
+        const countResult = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(featureRequestsTable)
+          .where(
+            and(
+              eq(featureRequestsTable.organizationId, input.organizationId),
+              gte(featureRequestsTable.createdAt, startOfMonth)
+            )
+          )
+          .limit(1);
+
+        const usage = Number(countResult[0]?.count ?? 0);
+        if (usage >= FREE_FEATURE_REQUEST_LIMIT) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Free plan limit reached. Upgrade to Pro for unlimited feature requests.",
+          });
+        }
+      }
+
       const result = await db
         .insert(featureRequestsTable)
         .values({

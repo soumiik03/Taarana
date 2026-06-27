@@ -41,12 +41,14 @@ if (env.NODE_ENV !== "prod") {
 
 import { inngestRoute } from "./routes/inngest";
 import { githubWebhookRoute } from "./routes/github-webhook";
+import { razorpayWebhookRoute } from "./routes/razorpay-webhook";
 
 // Mount Better Auth handler BEFORE body-parsing middleware
 app.all("/api/auth/{*path}", toNodeHandler(auth));
 
 // Mount Webhook handler BEFORE body-parsing middleware so it can read raw text body
 app.use("/api/github/webhook", githubWebhookRoute);
+app.use("/api/razorpay/webhook", razorpayWebhookRoute);
 
 app.use(express.json());
 
@@ -82,6 +84,10 @@ app.use(
   trpcExpress.createExpressMiddleware({
     router: serverRouter,
     createContext,
+    onError({ error, path }) {
+      console.error(`=== tRPC Error at path "${path}" ===`);
+      console.error(error);
+    },
   }),
 );
 export default app;

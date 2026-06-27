@@ -2,6 +2,7 @@ import { router, protectedProcedure } from "../../trpc";
 import { db, eq } from "@repo/database";
 import { organizationsTable, workspaceMembersTable } from "@repo/database/schema";
 import { TRPCError } from "@trpc/server";
+import { FREE_REPOSITORY_LIMIT } from "../../utils/limits";
 
 async function getOctokitApp() {
   const appId = process.env.GITHUB_APP_ID;
@@ -89,12 +90,30 @@ export const githubRouter = router({
         updatedAt: repo.updated_at ?? "",
       }));
 
+      // 5. Enforce repository limits for FREE plan
+      const orgRecord = await db
+        .select({ plan: organizationsTable.plan })
+        .from(organizationsTable)
+        .where(eq(organizationsTable.id, organizationId))
+        .limit(1)
+        .then((res) => res[0]);
+
+      if (orgRecord && orgRecord.plan === "FREE" && repos.length > FREE_REPOSITORY_LIMIT) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Free plan supports only one connected repository.",
+        });
+      }
+
       return {
         connected: true,
         repos,
       };
     } catch (error: any) {
       console.error("Failed to fetch GitHub repositories:", error);
+      if (error instanceof TRPCError) {
+        throw error;
+      }
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
         message: error.message || "Failed to fetch repositories from GitHub",

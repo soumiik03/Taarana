@@ -26,6 +26,9 @@ export function RequestForm({ organizationId }: { organizationId: string }) {
         router.push(`/dashboard/feature-requests/${data.id}`);
       }
     },
+    onError: (error) => {
+      console.error("Browser Console - tRPC createRequest error:", error);
+    },
   });
 
   return (
@@ -82,7 +85,7 @@ export function RequestForm({ organizationId }: { organizationId: string }) {
 
       {createRequest.isError && (
         <p className="text-sm text-red-400">
-          Something went wrong. Please try again.
+          {createRequest.error?.message || "Something went wrong. Please try again."}
         </p>
       )}
     </div>
