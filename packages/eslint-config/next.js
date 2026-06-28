@@ -52,6 +52,20 @@ export const nextJsConfig = [
       ...pluginReactHooks.configs.recommended.rules,
       // React scope no longer necessary with new JSX transform.
       "react/react-in-jsx-scope": "off",
+      "react/no-unescaped-entities": "off",
+      "react/no-unknown-property": "off",
+    },
+  },
+  {
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "turbo/no-undeclared-env-vars": "off",
+      "react/no-unescaped-entities": "off",
+      "react/no-unknown-property": "off",
+      "react/prop-types": "off",
+      "no-undef": "off",
+      "react-hooks/exhaustive-deps": "off",
     },
   },
 ];

@@ -1,9 +1,10 @@
 import { inngest } from "../inngest/client";
 import { prReceivedEvent } from "@repo/inngest";
+import { logger } from "@repo/logger";
 
 export async function triggerReview(prId: number, featureRequestId: string | null, installationId?: number, commitSha?: string) {
-  console.log(`[Webhook/Trigger] triggerReview called for PR ID: ${prId}, Feature Request ID: ${featureRequestId}, Installation ID: ${installationId}, Commit SHA: ${commitSha}`);
-  console.log("Calling inngest.send...");
+  logger.info(`[Webhook/Trigger] triggerReview called for PR ID: ${prId}, Feature Request ID: ${featureRequestId}, Installation ID: ${installationId}, Commit SHA: ${commitSha}`);
+  logger.info("Calling inngest.send...");
   await inngest.send({
     name: "github/pr.received",
     data: {
@@ -13,5 +14,5 @@ export async function triggerReview(prId: number, featureRequestId: string | nul
       commitSha,
     },
   });
-  console.log("Finished inngest.send successfully");
+  logger.info("Finished inngest.send successfully");
 }

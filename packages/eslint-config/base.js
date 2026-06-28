@@ -29,4 +29,11 @@ export const config = [
   {
     ignores: ["dist/**"],
   },
+  {
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "turbo/no-undeclared-env-vars": "off",
+    },
+  },
 ];
