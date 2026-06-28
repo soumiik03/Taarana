@@ -181,7 +181,6 @@ export const pullRequestsRouter = router({
         tasks: tasksList,
       };
     }),
-
   getReviewHistory: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ input }) => {
@@ -196,6 +195,16 @@ export const pullRequestsRouter = router({
           code: "NOT_FOUND",
           message: "Pull request not found",
         });
+      }
+
+      let featureRequest = null;
+      if (pr.featureRequestId) {
+        const [fr] = await db
+          .select()
+          .from(featureRequestsTable)
+          .where(eq(featureRequestsTable.id, pr.featureRequestId))
+          .limit(1);
+        featureRequest = fr;
       }
 
       try {
@@ -215,6 +224,8 @@ export const pullRequestsRouter = router({
             return {
               ...review,
               issues,
+              pullRequest: pr,
+              featureRequest,
             };
           })
         );

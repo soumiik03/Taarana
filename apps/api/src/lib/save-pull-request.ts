@@ -1,6 +1,59 @@
 import { db, eq, or } from "@repo/database";
-import { pullRequestsTable, featureRequestsTable } from "@repo/database/schema";
+import { pullRequestsTable, featureRequestsTable, prdsTable, tasksTable } from "@repo/database/schema";
 import { triggerReview } from "./trigger-review";
+
+// Extracts feature request ID by matching UUIDs found in text against feature request ID, PRD ID, or task ID.
+async function findFeatureRequestFromRefAndText(branch: string, title: string, body: string): Promise<string | null> {
+  const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+  const combinedText = `${branch} ${title} ${body}`;
+  const matches = combinedText.match(uuidRegex) || [];
+  
+  for (const match of matches) {
+    const uuidVal = match.toLowerCase();
+    
+    // 1. Check if it's a feature request ID
+    const [fr] = await db
+      .select({ id: featureRequestsTable.id })
+      .from(featureRequestsTable)
+      .where(eq(featureRequestsTable.id, uuidVal))
+      .limit(1);
+    if (fr) {
+      console.log(`[Link] Match found: UUID ${uuidVal} is a Feature Request ID.`);
+      return fr.id;
+    }
+    
+    // 2. Check if it's a PRD ID
+    const [prd] = await db
+      .select({ featureRequestId: prdsTable.featureRequestId })
+      .from(prdsTable)
+      .where(eq(prdsTable.id, uuidVal))
+      .limit(1);
+    if (prd) {
+      console.log(`[Link] Match found: UUID ${uuidVal} is a PRD ID linking to Feature Request ID ${prd.featureRequestId}.`);
+      return prd.featureRequestId;
+    }
+    
+    // 3. Check if it's a Task ID
+    const [task] = await db
+      .select({ prdId: tasksTable.prdId })
+      .from(tasksTable)
+      .where(eq(tasksTable.id, uuidVal))
+      .limit(1);
+    if (task) {
+      const [prdOfTask] = await db
+        .select({ featureRequestId: prdsTable.featureRequestId })
+        .from(prdsTable)
+        .where(eq(prdsTable.id, task.prdId))
+        .limit(1);
+      if (prdOfTask) {
+        console.log(`[Link] Match found: UUID ${uuidVal} is a Task ID. PRD ID: ${task.prdId}, Feature Request ID: ${prdOfTask.featureRequestId}.`);
+        return prdOfTask.featureRequestId;
+      }
+    }
+  }
+  
+  return null;
+}
 
 export async function savePullRequestAndLinkFeature(payload: any) {
   console.log("Started savePullRequestAndLinkFeature inside function");
@@ -19,31 +72,30 @@ export async function savePullRequestAndLinkFeature(payload: any) {
 
   // Try to link it if not already linked
   if (!featureRequestId) {
-    console.log("Querying open features...");
-    const openFeatures = await db
-      .select({ id: featureRequestsTable.id, title: featureRequestsTable.title })
-      .from(featureRequestsTable)
-      .where(
-        or(
-          eq(featureRequestsTable.status, "pending"),
-          eq(featureRequestsTable.status, "clarifying"),
-          eq(featureRequestsTable.status, "ready")
-        )
-      );
-    console.log(`Finished querying open features, found ${openFeatures.length}`);
+    // 1. Try UUID-based linking
+    featureRequestId = await findFeatureRequestFromRefAndText(pr.head.ref, pr.title, pr.body ?? "");
 
-    for (const feature of openFeatures) {
-      const matchBranch = pr.head.ref.toLowerCase().includes(feature.id.toLowerCase()) ||
-        pr.head.ref.toLowerCase().includes(feature.title.toLowerCase().replace(/\s+/g, '-'));
-      const body = pr.body?.toLowerCase() ?? "";
-      const matchBody = body.includes(feature.id.toLowerCase()) ||
-        body.includes(feature.title.toLowerCase());
-      const matchTitle = pr.title.toLowerCase().includes(feature.id.toLowerCase()) ||
-        pr.title.toLowerCase().includes(feature.title.toLowerCase());
+    // 2. Fallback to title/substring matching against all feature requests
+    if (!featureRequestId) {
+      console.log("Querying all features...");
+      const allFeatures = await db
+        .select({ id: featureRequestsTable.id, title: featureRequestsTable.title })
+        .from(featureRequestsTable);
+      console.log(`Finished querying all features, found ${allFeatures.length}`);
 
-      if (matchBranch || matchBody || matchTitle) {
-        featureRequestId = feature.id;
-        break;
+      for (const feature of allFeatures) {
+        const matchBranch = pr.head.ref.toLowerCase().includes(feature.id.toLowerCase()) ||
+          pr.head.ref.toLowerCase().includes(feature.title.toLowerCase().replace(/\s+/g, '-'));
+        const body = pr.body?.toLowerCase() ?? "";
+        const matchBody = body.includes(feature.id.toLowerCase()) ||
+          body.includes(feature.title.toLowerCase());
+        const matchTitle = pr.title.toLowerCase().includes(feature.id.toLowerCase()) ||
+          pr.title.toLowerCase().includes(feature.title.toLowerCase());
+
+        if (matchBranch || matchBody || matchTitle) {
+          featureRequestId = feature.id;
+          break;
+        }
       }
     }
   }

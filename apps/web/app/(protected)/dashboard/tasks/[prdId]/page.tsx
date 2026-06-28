@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Pencil, Trash2 } from "lucide-react";
 import { trpc } from "~/trpc/client";
 import { Button } from "~/components/ui/button";
+import { RotatingLoader } from "~/components/rotating-loader";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
@@ -71,8 +72,16 @@ function BoardSkeleton() {
 function EmptyState() {
   return (
     <div className="mx-auto flex min-h-[60vh] w-full max-w-7xl items-center justify-center px-4 py-8">
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-6 py-5 text-sm text-zinc-300 shadow-sm">
-        Generating tasks from your PRD...
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-8 py-6 shadow-sm">
+        <RotatingLoader
+          messages={[
+            "Generating tasks from your PRD...",
+            "Breaking down requirements into tickets...",
+            "Estimating task priority...",
+            "Creating action items for development...",
+            "Finalizing implementation task board..."
+          ]}
+        />
       </div>
     </div>
   );

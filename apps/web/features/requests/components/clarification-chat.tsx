@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { trpc } from "~/trpc/client";
 import { Button } from "~/components/ui/button";
+import { RotatingLoader } from "~/components/rotating-loader";
 
 export function ClarificationChat({ featureRequestId }: { featureRequestId: string }) {
   const router = useRouter();
@@ -153,6 +154,21 @@ export function ClarificationChat({ featureRequestId }: { featureRequestId: stri
             </div>
           );
         })}
+
+        {/* If all questions are answered and request is not yet ready, AI is analyzing/generating questions */}
+        {!questions.some(q => q.status === "pending") && request?.status !== "ready" && request?.status !== "rejected" && (
+          <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-5 animate-pulse">
+            <RotatingLoader
+              messages={[
+                "Analyzing your answers...",
+                "Checking feature request clarity...",
+                "Identifying potential ambiguities...",
+                "Deciding if context is developer-ready...",
+                "Formulating follow-up clarification..."
+              ]}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

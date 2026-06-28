@@ -4,6 +4,7 @@ import { use } from "react";
 import { trpc } from "~/trpc/client";
 import { ClarificationChat } from "~/features/requests/components/clarification-chat";
 import { Badge } from "~/components/ui/badge";
+import { RotatingLoader } from "~/components/rotating-loader";
 
 export default function FeatureRequestPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -45,9 +46,21 @@ export default function FeatureRequestPage({ params }: { params: Promise<{ id: s
             : "border-zinc-500/50 bg-zinc-500/10 text-zinc-400"
         }`}
       >
-        <div className="flex items-center justify-between">
-          <span>Status: {request.status.toUpperCase()}</span>
-          {request.status === "pending" && <span>AI is analyzing...</span>}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <span className="text-sm font-semibold">Status: {request.status.toUpperCase()}</span>
+          {request.status === "pending" && (
+            <div className="flex items-center gap-2">
+              <RotatingLoader
+                messages={[
+                  "Analyzing Feature Request...",
+                  "Extracting key details...",
+                  "Checking feature request clarity...",
+                  "Identifying potential ambiguities...",
+                  "Preparing clarification questions..."
+                ]}
+              />
+            </div>
+          )}
           {request.status === "clarifying" && <span>Needs more information</span>}
           {request.status === "ready" && <span>Ready for development</span>}
         </div>

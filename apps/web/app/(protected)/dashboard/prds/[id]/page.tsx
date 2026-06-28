@@ -5,6 +5,7 @@ import type { SelectPrd } from "@repo/database/schema";
 import { Button } from "~/components/ui/button";
 import { PrdEditor } from "~/features/prd/components/prd-editor";
 import { trpc } from "~/trpc/client";
+import { RotatingLoader } from "~/components/rotating-loader";
 
 type PrdContent = Pick<
   SelectPrd,
@@ -37,10 +38,17 @@ function LoadingPrd({ isRetrying }: { isRetrying?: boolean }) {
         <div className="mt-3 h-4 w-full max-w-lg animate-pulse rounded bg-zinc-900" />
       </div>
       <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
-        <div className="text-sm font-medium text-zinc-300">
-          {isRetrying ? "Restarting PRD generation..." : "Generating PRD..."}
-        </div>
-        <p className="mt-2 text-sm text-zinc-500">
+        <RotatingLoader
+          messages={[
+            isRetrying ? "Restarting PRD generation..." : "Generating PRD...",
+            "Structuring requirement sections...",
+            "Defining product goals...",
+            "Outlining acceptance criteria...",
+            "Identifying edge cases...",
+            "Adding success metrics..."
+          ]}
+        />
+        <p className="mt-2 text-center text-sm text-zinc-500">
           Taarana is turning the clarified request into a product requirements document.
         </p>
         <div className="mt-6 space-y-3">

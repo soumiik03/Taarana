@@ -8,11 +8,12 @@ import {
   tasksTable,
   reviewsTable,
   reviewIssuesTable,
+  clarificationQuestionsTable,
 } from "@repo/database/schema";
 import { eq } from "drizzle-orm";
 import { getPRDiff } from "../utils/pr-files";
 import { chunkDiff } from "../utils/chunk-code";
-import { generateReviewForChunk } from "../utils/generate-review";
+import { generateReviewForChunk, consolidateReview } from "../utils/generate-review";
 import { postReviewComments } from "../utils/pr-comment";
 
 export const reviewPRFunction = inngest.createFunction(
@@ -38,7 +39,7 @@ export const reviewPRFunction = inngest.createFunction(
     console.log(`[Review Run] Started review pipeline for PR ID: ${prId}, Commit: ${commitSha}`);
 
     // Step 1: Fetch everything we need from DB
-    const { pr, featureRequest, prd, org, tasks } = await step.run(
+    const { pr, featureRequest, prd, org, tasks, clarifications, previousReviews, resolvedFeatureRequestId } = await step.run(
       `fetch-context-${commitSha}`,
       async () => {
         const [pr] = await db.select().from(pullRequestsTable).where(eq(pullRequestsTable.githubId, prId));
@@ -47,15 +48,19 @@ export const reviewPRFunction = inngest.createFunction(
           throw new Error("Missing PR context");
         }
 
+        const targetFeatureRequestId = featureRequestId || pr.featureRequestId;
         let featureRequest = null;
         let prd = null;
         let org = null;
         let tasks: any[] = [];
+        let clarifications: any[] = [];
+        let previousReviews: any[] = [];
 
-        if (featureRequestId) {
-          [featureRequest] = await db.select().from(featureRequestsTable).where(eq(featureRequestsTable.id, featureRequestId));
+        if (targetFeatureRequestId) {
+          [featureRequest] = await db.select().from(featureRequestsTable).where(eq(featureRequestsTable.id, targetFeatureRequestId));
           if (featureRequest) {
-            [prd] = await db.select().from(prdsTable).where(eq(prdsTable.featureRequestId, featureRequestId));
+            clarifications = await db.select().from(clarificationQuestionsTable).where(eq(clarificationQuestionsTable.featureRequestId, targetFeatureRequestId));
+            [prd] = await db.select().from(prdsTable).where(eq(prdsTable.featureRequestId, targetFeatureRequestId));
             [org] = await db.select().from(organizationsTable).where(eq(organizationsTable.id, featureRequest.organizationId!));
             if (prd) {
               tasks = await db.select().from(tasksTable).where(eq(tasksTable.prdId, prd.id));
@@ -63,7 +68,22 @@ export const reviewPRFunction = inngest.createFunction(
           }
         }
 
-        return { pr, featureRequest, prd, org, tasks };
+        // Fetch review history (oldest first)
+        const rawReviews = await db
+          .select()
+          .from(reviewsTable)
+          .where(eq(reviewsTable.pullRequestId, pr.id))
+          .orderBy(reviewsTable.createdAt);
+          
+        for (const r of rawReviews) {
+          const issues = await db
+            .select()
+            .from(reviewIssuesTable)
+            .where(eq(reviewIssuesTable.reviewId, r.id));
+          previousReviews.push({ ...r, issues });
+        }
+
+        return { pr, featureRequest, prd, org, tasks, clarifications, previousReviews, resolvedFeatureRequestId: targetFeatureRequestId };
       }
     );
     console.log(`[Review Run] Context fetched for PR #${pr.prNumber} (${pr.repoOwner}/${pr.repoName})`);
@@ -88,8 +108,7 @@ export const reviewPRFunction = inngest.createFunction(
     const chunks = chunkDiff(files);
 
     // Step 4: Run AI review on each chunk using the full PRD and task list context
-    const allIssues: { filename: string | null; line: number | null; title: string; severity: string; whyItMatters: string; suggestedFix: string; expectedResult: string }[] = [];
-    let mergedAssessment = "";
+    const allIssues: { filename: string | null; line: number | null; title: string; severity: string; whyItMatters: string; suggestedFix: string; expectedResult: string; requirementReference?: string }[] = [];
 
     const prdContext = prd ? [
       `Problem Statement: ${(prd as any).problemStatement || "None"}`,
@@ -113,63 +132,65 @@ export const reviewPRFunction = inngest.createFunction(
         return generateReviewForChunk(prdContext, tasksListStr, chunk.filename, chunk.chunk, commitSha);
       });
 
-      if (result) {
-        if (result.overallAssessment) {
-          mergedAssessment = mergedAssessment 
-            ? `${mergedAssessment}\n\n${result.overallAssessment}`
-            : result.overallAssessment;
-        }
-        if (result.issues) {
-          result.issues.forEach((issue: any) => {
-            allIssues.push({
-              title: issue.title,
-              severity: issue.severity,
-              whyItMatters: issue.whyItMatters,
-              filename: issue.file || chunk.filename,
-              line: issue.line,
-              suggestedFix: issue.suggestedFix,
-              expectedResult: issue.expectedResult,
-            });
+      if (result && result.issues) {
+        result.issues.forEach((issue: any) => {
+          allIssues.push({
+            title: issue.title,
+            severity: issue.severity,
+            whyItMatters: issue.whyItMatters,
+            filename: issue.file || chunk.filename,
+            line: issue.line,
+            suggestedFix: issue.suggestedFix,
+            expectedResult: issue.expectedResult,
+            requirementReference: issue.requirementReference
           });
-        }
+        });
       }
     }
 
-    // Step 5: Deduplicate findings (same title and same file)
-    const uniqueIssuesMap = new Map<string, typeof allIssues[number]>();
-    for (const issue of allIssues) {
-      const fileKey = issue.filename || "";
-      const key = `${issue.title.toLowerCase().trim()}|${fileKey.toLowerCase().trim()}`;
-      if (!uniqueIssuesMap.has(key)) {
-        uniqueIssuesMap.set(key, issue);
-      }
-    }
-    const deduplicatedIssues = Array.from(uniqueIssuesMap.values());
+    // Step 5: Consolidate review using a second AI pass
+    const consolidationResult = await step.run(`consolidate-review-${commitSha}`, async () => {
+      // Format clarifications context
+      const clarificationsStr = clarifications && clarifications.length > 0
+        ? clarifications.map((c: any) => `Q: ${c.question}\nA: ${c.answer || "Unanswered"}`).join("\n\n")
+        : "No clarifications found.";
 
-    // Step 6: Calculate Review Score
-    let score = 100;
-    for (const issue of deduplicatedIssues) {
-      const sev = issue.severity.toLowerCase();
-      if (sev === "blocking") score -= 25;
-      else if (sev === "high") score -= 15;
-      else if (sev === "medium") score -= 8;
-      else if (sev === "low") score -= 3;
-      else if (sev === "suggestion") score -= 1;
-    }
-    score = Math.max(0, Math.min(100, score));
-    console.log(`[Review Run] Review score calculated: ${score}/100. Issues count: ${deduplicatedIssues.length}`);
+      // Format previous reviews context
+      const previousReviewsStr = previousReviews && previousReviews.length > 0
+        ? previousReviews.map((r: any, idx: number) => {
+            const issuesStr = r.issues && r.issues.length > 0
+              ? r.issues.map((i: any) => `- [${i.severity.toUpperCase()}] ${i.title} (in ${i.file || "N/A"})`).join("\n")
+              : "No issues reported.";
+            return `Review #${idx + 1} (Score: ${r.score}/100, Status: ${r.status}):\nOverall Assessment:\n${r.overallAssessment}\nIssues:\n${issuesStr}`;
+          }).join("\n\n---\n\n")
+        : "No previous reviews found.";
 
-    const hasBlocking = deduplicatedIssues.some((i) => i.severity.toLowerCase() === "blocking");
-    const overallStatus = hasBlocking ? "fix-needed" : "ready-for-approval";
+      // Format raw issues context
+      const rawIssuesStr = allIssues.length > 0
+        ? allIssues.map((i: any, idx: number) => {
+            return `Raw Issue #${idx + 1}:\nTitle: ${i.title}\nSeverity: ${i.severity}\nFile: ${i.filename}:${i.line}\nWhy it matters: ${i.whyItMatters}\nSuggested Fix: ${i.suggestedFix}\nExpected Result: ${i.expectedResult}\nRequirement Reference: ${i.requirementReference || "N/A"}`;
+          }).join("\n\n")
+        : "No raw issues found.";
 
-    // Enforce approval text when zero blocking issues exist
-    if (!hasBlocking && !mergedAssessment.includes("No blocking issues found. Ready for approval.")) {
-      if (!mergedAssessment || mergedAssessment === "Failed to parse overall assessment." || mergedAssessment === "No overall assessment provided.") {
-        mergedAssessment = "No blocking issues found. Ready for approval.";
-      } else {
-        mergedAssessment = `${mergedAssessment}\n\nNo blocking issues found. Ready for approval.`;
-      }
-    }
+      // Format full diff context
+      const fullDiffStr = files.map(f => `File: ${f.filename}\n${f.patch}`).join("\n\n");
+
+      return consolidateReview({
+        prdContext: prdContext.join("\n\n---\n\n"),
+        tasksContext: tasksListStr,
+        featureRequest: featureRequest ? `Title: ${featureRequest.title}\nDescription: ${featureRequest.description}` : "No feature request found.",
+        clarifications: clarificationsStr,
+        previousReviews: previousReviewsStr,
+        rawIssues: rawIssuesStr,
+        fullDiff: fullDiffStr,
+        commitSha,
+      });
+    });
+
+    const score = consolidationResult.score;
+    const overallStatus = consolidationResult.approved ? "ready-for-approval" : "fix-needed";
+    const mergedAssessment = consolidationResult.overallAssessment;
+    const deduplicatedIssues = consolidationResult.outstandingIssues;
 
     // Step 7: Save Review to database
     const newReview = await step.run(`save-review-${commitSha}`, async () => {
@@ -200,9 +221,9 @@ export const reviewPRFunction = inngest.createFunction(
           deduplicatedIssues.map((issue) => ({
             reviewId: newReview.id,
             title: issue.title,
-            severity: issue.severity.toLowerCase(),
+            severity: (issue.severity || "suggestion").toLowerCase(),
             whyItMatters: issue.whyItMatters,
-            file: issue.filename,
+            file: issue.file,
             line: issue.line,
             suggestedFix: issue.suggestedFix,
             expectedResult: issue.expectedResult,
@@ -215,6 +236,10 @@ export const reviewPRFunction = inngest.createFunction(
     // Step 9: Post comments to GitHub
     await step.run(`github-review-${commitSha}`, async () => {
       console.log(`[Review Run] Creating a new GitHub review for commit: ${commitSha}...`);
+      // If approved, we pass zero outstanding comments to prevent any comment noise on GitHub.
+      // Suggestions/recommendations are fully shown in the overall assessment markdown.
+      const issuesForGitHub = consolidationResult.approved ? [] : deduplicatedIssues;
+
       await postReviewComments(
         githubInstallationId,
         pr.repoOwner,
@@ -222,9 +247,9 @@ export const reviewPRFunction = inngest.createFunction(
         pr.prNumber,
         commitSha,
         mergedAssessment,
-        hasBlocking,
-        deduplicatedIssues.map((issue) => ({
-          filename: issue.filename || "",
+        overallStatus === "fix-needed",
+        issuesForGitHub.map((issue) => ({
+          filename: issue.file || "",
           line: issue.line,
           comment: `**Title:** ${issue.title}
 **Severity:** ${issue.severity.toUpperCase()}
@@ -237,30 +262,30 @@ ${issue.suggestedFix}
 
 **Expected Result:**
 ${issue.expectedResult}`,
-          type: issue.severity.toLowerCase() === "blocking" ? "blocking" : "non-blocking",
+          type: (issue.severity || "suggestion").toLowerCase() === "blocking" ? "blocking" : "non-blocking",
         }))
       );
       console.log(`[Review Run] GitHub review created successfully for commit: ${commitSha}`);
     });
 
     // Step 10: Update feature request status based on current run results only
-    if (featureRequestId) {
+    if (resolvedFeatureRequestId) {
       await step.run(`update-status-${commitSha}`, async () => {
-        console.log(`[Review Run] Updating feature request status to ${overallStatus} for ID: ${featureRequestId}...`);
+        console.log(`[Review Run] Updating feature request status to ${overallStatus} for ID: ${resolvedFeatureRequestId}...`);
         await db
           .update(featureRequestsTable)
           .set({
             status: overallStatus,
             updatedAt: new Date(),
           })
-          .where(eq(featureRequestsTable.id, featureRequestId));
-        console.log(`[Review Run] Dashboard data and feature request status updated for ID: ${featureRequestId}`);
+          .where(eq(featureRequestsTable.id, resolvedFeatureRequestId));
+        console.log(`[Review Run] Dashboard data and feature request status updated for ID: ${resolvedFeatureRequestId}`);
       });
     }
 
     return {
       totalIssues: deduplicatedIssues.length,
-      blockingCount: deduplicatedIssues.filter((i) => i.severity.toLowerCase() === "blocking").length,
+      blockingCount: deduplicatedIssues.filter((i) => (i.severity || "").toLowerCase() === "blocking").length,
       score,
       status: overallStatus,
     };

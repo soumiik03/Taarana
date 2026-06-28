@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { trpc } from "~/trpc/client";
@@ -25,9 +25,114 @@ import {
   HelpCircle,
   AlertTriangle,
   History,
-  FileCheck
+  FileCheck,
+  Circle,
+  Loader2
 } from "lucide-react";
 import { cn } from "~/lib/utils";
+import { RotatingLoader } from "~/components/rotating-loader";
+
+interface AIReviewProgressCardProps {
+  isReviewInProgress: boolean;
+  pr: any;
+}
+
+function AIReviewProgressCard({ isReviewInProgress, pr }: AIReviewProgressCardProps) {
+  const [currentStep, setCurrentStep] = useState(0);
+
+  const steps = [
+    { label: "Loading Feature Request", duration: 1500 },
+    { label: "Reading PRD", duration: 1500 },
+    { label: "Reading Generated Tasks", duration: 1500 },
+    { label: "Fetching GitHub Diff", duration: 2000 },
+    { label: "Reviewing Code", duration: 3000 },
+    { label: "Detecting Requirement Violations", duration: 3500 },
+    { label: "Consolidating Findings", duration: 3000 },
+    { label: "Preparing Report", duration: 2500 }
+  ];
+
+  useEffect(() => {
+    if (!isReviewInProgress) {
+      setCurrentStep(0);
+      return;
+    }
+
+    let current = 0;
+    const timers: NodeJS.Timeout[] = [];
+
+    const runNextStep = () => {
+      if (current >= steps.length) return;
+      
+      const timer = setTimeout(() => {
+        current += 1;
+        setCurrentStep(current);
+        runNextStep();
+      }, steps[current]?.duration ?? 2000);
+      
+      timers.push(timer);
+    };
+
+    runNextStep();
+
+    return () => {
+      timers.forEach(clearTimeout);
+    };
+  }, [isReviewInProgress]);
+
+  return (
+    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+      <div className="bg-[#252525] border border-[#2D2D2D] rounded-xl p-6 space-y-4 max-w-sm w-full text-left shadow-lg">
+        <div className="flex items-center justify-between border-b border-[#2D2D2D] pb-3">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <Loader2 className="h-4.5 w-4.5 text-indigo-400 animate-spin" />
+            AI Review Running
+          </h3>
+          <span className="text-[9px] font-mono text-[#9B9B9B] bg-zinc-800 px-2 py-0.5 rounded">
+            Commit: {pr?.headSha?.slice(0, 7)}
+          </span>
+        </div>
+        
+        {/* Context messages rotating based on active step */}
+        <div className="bg-zinc-950/40 p-2.5 rounded-lg border border-zinc-900 text-[11px] text-zinc-400 text-center animate-pulse min-h-[34px] flex items-center justify-center">
+          {currentStep === 0 && "Analyzing Feature Request..."}
+          {currentStep === 1 && "Comparing PRD with implementation..."}
+          {currentStep === 2 && "Reading changed files..."}
+          {currentStep === 3 && "Fetching diff details from GitHub..."}
+          {currentStep === 4 && "Checking requirements coverage..."}
+          {currentStep === 5 && "Detecting compliance violations..."}
+          {currentStep === 6 && "Consolidating findings and comments..."}
+          {currentStep >= 7 && "Preparing final assessment..."}
+        </div>
+
+        <div className="space-y-3 pt-2">
+          {steps.map((step, idx) => {
+            const isCompleted = currentStep > idx;
+            const isActive = currentStep === idx;
+
+            return (
+              <div key={idx} className="flex items-center gap-3 text-xs">
+                {isCompleted ? (
+                  <CheckCircle2 className="h-4.5 w-4.5 text-emerald-400 shrink-0" />
+                ) : isActive ? (
+                  <Loader2 className="h-4.5 w-4.5 text-indigo-400 animate-spin shrink-0" />
+                ) : (
+                  <Circle className="h-4.5 w-4.5 text-zinc-700 shrink-0" />
+                )}
+                <span className={cn(
+                  "transition-colors duration-300",
+                  isCompleted ? "text-[#E3E3E3] font-medium" :
+                  isActive ? "text-indigo-400 font-bold" : "text-zinc-500"
+                )}>
+                  {step.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function PullRequestDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -82,23 +187,38 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
   const { pr, featureRequest, prd, tasks } = ctx;
 
   // Visual stages for Workflow Timeline
-  const isClarified = featureRequest && featureRequest.status !== "pending" && featureRequest.status !== "clarifying";
-  const isPrdApproved = prd && prd.status === "approved";
-  const isTasksGenerated = tasks && tasks.length > 0;
   const isPrOpen = pr.status === "open" || pr.status === "closed";
   const isPrReviewed = !!reviewHistory?.latest;
   const isFixNeeded = featureRequest && featureRequest.status === "fix-needed";
   const isApproved = featureRequest && featureRequest.status === "ready-for-approval";
   const isShipped = pr.status === "closed";
 
+  // Enforce cascading completion: if any later stage is active/completed, earlier stages are completed
+  const hasPRReviewedOrBeyond = isPrReviewed || isApproved || isFixNeeded || isShipped;
+  const hasPROpenOrBeyond = isPrOpen || hasPRReviewedOrBeyond;
+  
+  const isClarified = !!(featureRequest && featureRequest.status !== "pending" && featureRequest.status !== "clarifying") || hasPROpenOrBeyond;
+  const isPrdApproved = !!(prd && prd.status === "approved") || hasPROpenOrBeyond;
+  const isTasksGenerated = !!(tasks && tasks.length > 0) || hasPROpenOrBeyond;
+
+  // Dynamic counts for tasks in timeline
+  const totalTasks = tasks ? tasks.length : 0;
+  const completedTasks = tasks ? tasks.filter(t => t.status === "done").length : 0;
+  const tasksDetail = (() => {
+    if (!isTasksGenerated || totalTasks === 0) return "Generating...";
+    if (completedTasks === totalTasks) return `${totalTasks} / ${totalTasks} Completed`;
+    if (completedTasks > 0) return `${completedTasks} / ${totalTasks} Completed`;
+    return `${totalTasks} Tasks Generated`;
+  })();
+
   const timelineStages = [
     { label: "Feature Request", completed: true, active: false, details: "Logged successfully" },
-    { label: "Clarification", completed: isClarified, active: !isClarified && featureRequest?.status === "clarifying", details: isClarified ? "Completed" : "Questions pending" },
-    { label: "PRD Draft", completed: isPrdApproved, active: isClarified && !isPrdApproved, details: isPrdApproved ? "PRD Approved" : "Awaiting approval" },
-    { label: "Tasks Generated", completed: isTasksGenerated, active: isPrdApproved && !isTasksGenerated, details: isTasksGenerated ? `${tasks.length} tasks ready` : "Generating..." },
-    { label: "Pull Request", completed: isPrOpen, active: isTasksGenerated && !isPrOpen, details: isPrOpen ? "Code submitted" : "In development" },
-    { label: "AI QA Review", completed: isPrReviewed, active: isPrOpen && !isPrReviewed, details: isPrReviewed ? "Analysis complete" : "Awaiting review webhook" },
-    { label: "Approval Status", completed: isApproved, active: isPrReviewed && !isApproved, details: isApproved ? "Ready for approval" : isFixNeeded ? "Fix needed" : "Pending approval" },
+    { label: "Clarifications", completed: isClarified, active: !isClarified && featureRequest?.status === "clarifying", details: isClarified ? "Completed" : "Questions pending" },
+    { label: "PRD Approved", completed: isPrdApproved, active: isClarified && !isPrdApproved, details: isPrdApproved ? "Approved" : "Awaiting approval" },
+    { label: "Tasks Generated", completed: isTasksGenerated, active: isPrdApproved && !isTasksGenerated, details: tasksDetail },
+    { label: "Pull Request Submitted", completed: isPrOpen || hasPRReviewedOrBeyond, active: isTasksGenerated && !isPrOpen && !hasPRReviewedOrBeyond, details: (isPrOpen || hasPRReviewedOrBeyond) ? "Submitted" : "In development" },
+    { label: "AI Review Completed", completed: isPrReviewed || isApproved || isFixNeeded || isShipped, active: isPrOpen && !isPrReviewed && !isApproved && !isFixNeeded && !isShipped, details: (isPrReviewed || isApproved || isFixNeeded || isShipped) ? "Completed" : "Awaiting review" },
+    { label: "Approved / Fix Required", completed: isApproved || isFixNeeded || isShipped, active: isPrReviewed && !isApproved && !isFixNeeded && !isShipped, details: isApproved || isShipped ? "Approved" : isFixNeeded ? "Fix required" : "Pending decision" },
     { label: "Shipped", completed: isShipped, active: isApproved && !isShipped, details: isShipped ? "Merged into prod" : "Ready to merge" },
   ];
 
@@ -213,13 +333,7 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
             </CardHeader>
             <CardContent className="pt-4 space-y-6">
               {isReviewInProgress ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
-                  <div className="h-8 w-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-white">Review in progress...</p>
-                    <p className="text-xs text-[#9B9B9B]">Analyzing commit {pr.headSha.slice(0, 7)} against requirements</p>
-                  </div>
-                </div>
+                <AIReviewProgressCard isReviewInProgress={isReviewInProgress} pr={pr} />
               ) : latestReview ? (
                 <>
                   <div className="space-y-6">
@@ -520,10 +634,21 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
                               {iter.status === "ready-for-approval" ? "Ready for Approval" : "Fix Required"}
                             </Badge>
                           </div>
-                          <div className="text-[11px] text-zinc-400">
-                            Issues: {totalCount} total ({blockingCount} blocking)
+                          <div className="text-[11px] text-zinc-400 flex items-center justify-between flex-wrap gap-2 pt-0.5">
+                            <span>Issues: {totalCount} total ({blockingCount} blocking)</span>
+                            <span className="font-semibold text-indigo-400">Score: {iter.score}/100</span>
                           </div>
-                          <p className="text-xs text-[#E3E3E3] mt-2 leading-relaxed bg-zinc-950 p-2.5 rounded-lg border border-[#2D2D2D]/60 truncate">
+                          <div className="text-[10px] text-[#9B9B9B] space-y-0.5 mt-2 border-t border-[#2D2D2D]/60 pt-2">
+                            <div>
+                              <span className="font-semibold text-zinc-500">Pull Request:</span> #{iter.pullRequest?.prNumber} &middot; {iter.pullRequest?.title}
+                            </div>
+                            {iter.featureRequest && (
+                              <div>
+                                <span className="font-semibold text-zinc-500">Feature Request:</span> {iter.featureRequest?.title}
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-xs text-[#E3E3E3] mt-2.5 leading-relaxed bg-zinc-950 p-2.5 rounded-lg border border-[#2D2D2D]/60 truncate">
                             {iter.overallAssessment}
                           </p>
                           <div className="text-[10px] text-[#38BDF8] font-semibold pt-1 flex justify-end hover:underline">
@@ -555,13 +680,13 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
               {featureRequest ? (
                 <div className="space-y-3">
                   <div>
-                    <span className="text-[10px] text-[#9B9B9B] uppercase tracking-wider block font-bold">Title</span>
+                    <span className="text-[10px] text-[#9B9B9B] uppercase tracking-wider block font-bold">Feature Request</span>
                     <Link href={`/dashboard/feature-requests/${featureRequest.id}`} className="text-xs font-bold text-white hover:underline leading-relaxed block mt-0.5">
                       {featureRequest.title}
                     </Link>
                   </div>
                   <div>
-                    <span className="text-[10px] text-[#9B9B9B] uppercase tracking-wider block font-bold">Review Status</span>
+                    <span className="text-[10px] text-[#9B9B9B] uppercase tracking-wider block font-bold">Current Status</span>
                     <Badge variant="outline" className={cn(
                       "text-[9px] uppercase font-bold mt-1 px-2 py-0.5",
                       featureRequest.status === "ready-for-approval" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
@@ -573,8 +698,20 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
                     </Badge>
                   </div>
                   <div>
-                    <span className="text-[10px] text-[#9B9B9B] uppercase tracking-wider block font-bold">Origin Source</span>
-                    <span className="text-xs font-medium text-white capitalize block mt-0.5">{featureRequest.source}</span>
+                    <span className="text-[10px] text-[#9B9B9B] uppercase tracking-wider block font-bold">Linked PRD</span>
+                    {prd ? (
+                      <Link href={`/dashboard/prds/${prd.id}`} className="text-xs font-semibold text-[#38BDF8] hover:underline block mt-0.5">
+                        PRD ({prd.status})
+                      </Link>
+                    ) : (
+                      <span className="text-xs font-medium text-zinc-500 block mt-0.5">No PRD generated</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#9B9B9B] uppercase tracking-wider block font-bold">Engineering Tasks</span>
+                    <span className="text-xs font-semibold text-white block mt-0.5">
+                      {tasks ? `${tasks.filter(t => t.status === "done").length} / ${tasks.length} Completed` : "0 / 0 Completed"}
+                    </span>
                   </div>
                   <Link href={`/dashboard/feature-requests/${featureRequest.id}`}>
                     <Button size="sm" variant="outline" className="w-full border-zinc-700 text-zinc-300 hover:bg-zinc-800 font-semibold py-4 text-xs">
@@ -693,6 +830,25 @@ export default function PullRequestDetailsPage({ params }: { params: Promise<{ i
                     <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/20 px-1.5 py-0">
                       {selectedReview.issues?.filter((i: any) => i.severity !== "blocking").length} Suggestions
                     </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Linked Context Card */}
+              <div className="bg-[#222] p-4 rounded-xl border border-[#2D2D2D] space-y-2">
+                <span className="text-[10px] text-[#9B9B9B] uppercase font-bold tracking-wider block">Linked Context</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="text-zinc-500 font-bold block">Pull Request</span>
+                    <span className="text-white">#{selectedReview.pullRequest?.prNumber} &middot; {selectedReview.pullRequest?.title}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500 font-bold block">Feature Request</span>
+                    {selectedReview.featureRequest ? (
+                      <span className="text-white">{selectedReview.featureRequest.title}</span>
+                    ) : (
+                      <span className="text-zinc-500">None</span>
+                    )}
                   </div>
                 </div>
               </div>

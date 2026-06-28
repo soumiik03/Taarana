@@ -2,9 +2,10 @@ import { PrdEditor } from "~/features/prd/components/prd-editor";
 import { api } from "~/trpc/server";
 import { notFound } from "next/navigation";
 
-export default async function PrdPage({ params }: { params: { id: string } }) {
+export default async function PrdPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   // Fetch the PRD data
-  const prd = await api.prd.getByFeatureRequest.query({ featureRequestId: params.id });
+  const prd = await api.prd.getByFeatureRequest.query({ featureRequestId: id });
 
   if (!prd) {
     return (
