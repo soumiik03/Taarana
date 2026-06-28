@@ -65,42 +65,42 @@ export function Features() {
                   </defs>
 
                   {/* Faint base path */}
-                  <path d="M20,50 C100,50 120,20 200,20 C280,20 300,80 380,80 C460,80 480,50 560,50" fill="none" stroke="#E5E5E5" stroke-width="1.5" stroke-dasharray="4 4"></path>
+                  <path d="M20,50 C100,50 120,20 200,20 C280,20 300,80 380,80 C460,80 480,50 560,50" fill="none" stroke="#E5E5E5" strokeWidth="1.5" strokeDasharray="4 4"></path>
 
                   {/* Highlight animated path on hover */}
                   <path
                     d="M20,50 C100,50 120,20 200,20 C280,20 300,80 380,80 C460,80 480,50 560,50"
                     fill="none"
                     stroke="#111"
-                    stroke-width="1.5"
-                    stroke-dasharray="600"
-                    stroke-dashoffset="600"
+                    strokeWidth="1.5"
+                    strokeDasharray="600"
+                    strokeDashoffset="600"
                     className="transition-all duration-[1500ms] ease-in-out group-hover:stroke-dashoffset-0"
-                    marker-end="url(#arrow-head-trace)"
+                    markerEnd="url(#arrow-head-trace)"
                   ></path>
 
                   {/* Interactive node dots */}
                   <g className="transition-all duration-500 delay-0 opacity-100 group-hover:scale-110 origin-center">
                     <circle cx="20" cy="50" r="4" fill="#111"></circle>
-                    <text x="20" y="70" text-anchor="middle" font-family="monospace" font-size="8" fill="#737373" className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <text x="20" y="70" textAnchor="middle" fontFamily="monospace" fontSize="8" fill="#737373" className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                       REQUEST
                     </text>
                   </g>
                   <g className="transition-all duration-500 delay-[400ms] opacity-50 scale-75 group-hover:opacity-100 group-hover:scale-100 origin-center">
-                    <circle cx="200" cy="20" r="4" fill="#fff" stroke="#111" stroke-width="1.5"></circle>
-                    <text x="200" y="40" text-anchor="middle" font-family="monospace" font-size="8" fill="#737373" className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <circle cx="200" cy="20" r="4" fill="#fff" stroke="#111" strokeWidth="1.5"></circle>
+                    <text x="200" y="40" textAnchor="middle" fontFamily="monospace" fontSize="8" fill="#737373" className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                       SPEC
                     </text>
                   </g>
                   <g className="transition-all duration-500 delay-[800ms] opacity-50 scale-75 group-hover:opacity-100 group-hover:scale-100 origin-center">
-                    <circle cx="380" cy="80" r="4" fill="#fff" stroke="#111" stroke-width="1.5"></circle>
-                    <text x="380" y="100" text-anchor="middle" font-family="monospace" font-size="8" fill="#737373" className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <circle cx="380" cy="80" r="4" fill="#fff" stroke="#111" strokeWidth="1.5"></circle>
+                    <text x="380" y="100" textAnchor="middle" fontFamily="monospace" fontSize="8" fill="#737373" className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                       QA REVIEW
                     </text>
                   </g>
                   <g className="transition-all duration-500 delay-[1200ms] opacity-50 scale-75 group-hover:opacity-100 group-hover:scale-100 origin-center">
                     <circle cx="560" cy="50" r="4" fill="#111"></circle>
-                    <text x="560" y="70" text-anchor="middle" font-family="monospace" font-size="8" fill="#111" font-weight="bold" className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <text x="560" y="70" textAnchor="middle" fontFamily="monospace" fontSize="8" fill="#111" fontWeight="bold" className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                       MERGED
                     </text>
                   </g>

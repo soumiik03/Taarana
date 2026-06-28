@@ -17,7 +17,7 @@ export function Footer() {
             <button
               onClick={scrollToTop}
               className="relative h-12 w-36 overflow-visible opacity-90 hover:opacity-100 transition-opacity block cursor-pointer"
-              style={{ marginLeft: "-90px" }}
+              style={{ marginLeft: "-90px", marginRight: "90px" }}
               aria-label="Back to top"
             >
               <Image

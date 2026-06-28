@@ -25,7 +25,7 @@ export default async function Home() {
           background-image:
             linear-gradient(to right, rgba(0, 0, 0, 0.03) 1px, transparent 1px),
             linear-gradient(to bottom, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
-          mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
+          mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
         }
         .premium-card {
           background: #FFFFFF;
