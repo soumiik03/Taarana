@@ -30,7 +30,7 @@ if (process.env.BETTER_AUTH_URL) {
   allowedOrigins.push(process.env.BETTER_AUTH_URL.replace(/\/$/, ""));
 }
 
-if (env.NODE_ENV !== "prod") {
+if (env.NODE_ENV !== "production") {
   app.use(
     cors({
       origin: allowedOrigins,

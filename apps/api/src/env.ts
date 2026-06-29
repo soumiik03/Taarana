@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const envSchema = z.object({
   PORT: z.string().optional(),
-  NODE_ENV: z.enum(["development", "prod"]).default("development"),
+  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   BASE_URL: z.string().default("http://localhost:8000"),
   GITHUB_APP_ID: z.string(),
   GITHUB_APP_PRIVATE_KEY: z.string(),
