@@ -1,5 +1,5 @@
 import winston from "winston";
-import { env } from "./env.js";
+import { env } from "./env";
 
 type LoggerLevel = "error" | "info" | "debug";
 
