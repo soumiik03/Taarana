@@ -11,4 +11,9 @@ export const prReceivedEvent = eventType("github/pr.received", {
   }>(),
 });
 
-export const inngest = new Inngest({ id: "taarana" });
+export const inngest = new Inngest({
+  id: "taarana",
+  baseUrl:
+    process.env.INNGEST_BASE_URL ||
+    (process.env.NODE_ENV === "production" ? undefined : "http://127.0.0.1:8288/"),
+});

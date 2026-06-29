@@ -7,7 +7,6 @@ import {
   GitPullRequest,
   History,
   CreditCard,
-  Settings,
 } from "lucide-react";
 
 export interface RouteItem {
@@ -56,11 +55,6 @@ export const dashboardRoutes: RouteItem[] = [
     label: "Billing",
     href: "/dashboard/billing",
     icon: CreditCard,
-  },
-  {
-    label: "Settings",
-    href: "/dashboard/settings",
-    icon: Settings,
   },
 ];
 

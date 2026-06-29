@@ -4,7 +4,7 @@
   "scripts": {
     "build": "dotenv -- turbo build",
     "dev": "dotenv -- turbo dev",
-    "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:8000/api/inngest",
+    "inngest:dev": "npx inngest-cli@latest dev -u http://127.0.0.1:8000/api/inngest",
     "db:generate": "dotenv -- turbo db:generate",
     "db:migrate": "dotenv -- turbo db:migrate",
     "lint": "turbo run lint",
