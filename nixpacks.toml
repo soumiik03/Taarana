@@ -5,7 +5,7 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm i -g pnpm@9.0.0", "pnpm install --frozen-lockfile"]
 
 [phases.build]
-cmds = ["pnpm build"]
+cmds = ["pnpm --filter @repo/api build"]
 
 [start]
-cmd = "node apps/api/dist/index.js"
+cmd = "pnpm --filter @repo/api start"
