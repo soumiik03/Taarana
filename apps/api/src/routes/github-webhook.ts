@@ -6,6 +6,13 @@ import { logger } from "@repo/logger";
 
 export const githubWebhookRoute = express.Router();
 
+// GET handler to confirm the endpoint is mounted and reachable.
+// Without this, GET requests fall through to the tRPC OpenAPI middleware
+// which returns {"message":"Not found","code":"NOT_FOUND"}.
+githubWebhookRoute.get("/", (_req, res) => {
+  return res.status(200).json({ ok: true, endpoint: "/api/github/webhook", methods: ["POST"] });
+});
+
 githubWebhookRoute.post("/", express.text({ type: "application/json" }), async (req, res) => {
   logger.info("=== Webhook received ===");
   const WEBHOOK_SECRET = env.GITHUB_WEBHOOK_SECRET;

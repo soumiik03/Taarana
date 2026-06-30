@@ -30,19 +30,29 @@ const openApiDocument = generateOpenApiDocument(serverRouter, {
   baseUrl: env.BASE_URL.concat("/api"),
 });
 
-const allowedOrigins = ["http://localhost:3000"];
+const allowedOrigins = ["http://localhost:3000", "http://localhost:3001"];
 if (process.env.BETTER_AUTH_URL) {
   allowedOrigins.push(process.env.BETTER_AUTH_URL.replace(/\/$/, ""));
 }
-
-if (env.NODE_ENV !== "production") {
-  app.use(
-    cors({
-      origin: allowedOrigins,
-      credentials: true,
-    }),
-  );
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL.replace(/\/$/, ""));
 }
+
+// CORS must run in ALL environments (including production) so the browser
+// frontend on a different origin can reach the API.
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (server-to-server, curl, etc.)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      // Allow any vercel.app subdomain for preview deployments
+      if (origin.endsWith(".vercel.app")) return callback(null, true);
+      return callback(new Error(`CORS: origin '${origin}' not allowed`));
+    },
+    credentials: true,
+  }),
+);
 
 import { inngestRoute } from "./routes/inngest";
 import { githubWebhookRoute } from "./routes/github-webhook";
