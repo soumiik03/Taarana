@@ -17,9 +17,15 @@ export function AuthCard() {
     setIsLoading(true);
     setError(null);
     try {
+      // Ensure the callback URL is absolute to the frontend origin so that
+      // the backend does not redirect the browser relative to the API server domain.
+      const absoluteCallbackUrl = callbackUrl.startsWith("/")
+        ? `${window.location.origin}${callbackUrl}`
+        : callbackUrl;
+
       const result = await signIn.social({
         provider: "github",
-        callbackURL: callbackUrl,
+        callbackURL: absoluteCallbackUrl,
       });
       // If signIn.social returns an error instead of redirecting
       if (result?.error) {
