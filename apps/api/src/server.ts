@@ -1,8 +1,11 @@
+console.log("[Startup] [server.ts] 1: Starting server.ts file");
 import express from "express";
 import { logger } from "@repo/logger";
 import cors from "cors";
+console.log("[Startup] [server.ts] 2: Importing better-auth Node handler and auth");
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./lib/auth";
+console.log("[Startup] [server.ts] 3: Imported auth");
 
 
 
@@ -13,7 +16,9 @@ import * as trpcExpress from "@trpc/server/adapters/express";
 import { generateOpenApiDocument, createOpenApiExpressMiddleware } from "trpc-to-openapi";
 import { apiReference } from "@scalar/express-api-reference";
 
+console.log("[Startup] [server.ts] 4: Importing serverRouter");
 import { serverRouter, createContext } from "@repo/trpc/server";
+console.log("[Startup] [server.ts] 5: Imported serverRouter");
 
 import { env } from "./env";
 

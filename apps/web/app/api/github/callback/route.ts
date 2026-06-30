@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { saveInstallationId } from "~/features/github/server/installation";
 import { authClient } from "~/lib/auth-client";
+import { getBackendUrl } from "~/lib/api-url";
 
 /**
  * GitHub App installation callback handler.
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     // Get the current user's session from cookies
     const cookieHeader = request.headers.get("cookie") ?? "";
     const sessionResponse = await fetch(
-      "http://127.0.0.1:8000/api/auth/get-session",
+      `${getBackendUrl()}/api/auth/get-session`,
       {
         headers: { cookie: cookieHeader },
       }

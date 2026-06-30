@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getBackendUrl } from "~/lib/api-url";
 
 const protectedRoutes = ["/dashboard"];
 const authRoutes = ["/sign-in"];
@@ -25,8 +26,8 @@ export async function proxy(request: NextRequest) {
   let isValidSession = false;
   if (sessionCookie) {
     try {
-      // Fetch session directly from the local API server on port 8000
-      const res = await fetch("http://127.0.0.1:8000/api/auth/get-session", {
+      // Fetch session directly from the dynamically resolved API server
+      const res = await fetch(`${getBackendUrl()}/api/auth/get-session`, {
         headers: { cookie: request.headers.get("cookie") ?? "" },
       });
       if (res.ok) {

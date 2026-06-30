@@ -1,9 +1,13 @@
+console.log("[Startup] [auth.ts] 1: Starting auth.ts file");
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+console.log("[Startup] [auth.ts] 2: Importing db");
 import db from "@repo/database";
+console.log("[Startup] [auth.ts] 3: Importing database schema");
 import * as schema from "@repo/database/schema";
 
 
+console.log("[Startup] [auth.ts] 4: Calling betterAuth()");
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
   database: drizzleAdapter(db, {

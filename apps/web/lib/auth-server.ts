@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { getBackendUrl } from "~/lib/api-url";
 
 export async function getServerSession() {
   try {
@@ -7,7 +8,7 @@ export async function getServerSession() {
 
     if (!cookieHeader) return null;
 
-    const res = await fetch("http://127.0.0.1:8000/api/auth/get-session", {
+    const res = await fetch(`${getBackendUrl()}/api/auth/get-session`, {
       headers: { cookie: cookieHeader },
       cache: "no-store",
     });

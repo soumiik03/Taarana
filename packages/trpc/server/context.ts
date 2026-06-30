@@ -13,7 +13,8 @@ export async function createContext({ req, res }: CreateExpressContextOptions) {
   }
 
   try {
-    const authRes = await fetch("http://127.0.0.1:8000/api/auth/get-session", {
+    const apiBaseUrl = process.env.API_URL || process.env.BASE_URL || `http://127.0.0.1:${process.env.PORT || 8000}`;
+    const authRes = await fetch(`${apiBaseUrl}/api/auth/get-session`, {
       headers: { cookie: cookies },
     });
 

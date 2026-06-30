@@ -6,7 +6,11 @@ const envSchema = z.object({
 
 function createEnv(env: NodeJS.ProcessEnv) {
   const safeParseResult = envSchema.safeParse(env);
-  if (!safeParseResult.success) throw new Error(safeParseResult.error.message);
+  if (!safeParseResult.success) {
+    console.error("=== Database Environment Variable Validation Failed ===");
+    console.error(JSON.stringify(safeParseResult.error.format(), null, 2));
+    throw new Error(safeParseResult.error.message);
+  }
   return safeParseResult.data;
 }
 
